@@ -1,0 +1,64 @@
+{
+  "name": "ashid",
+  "version": "1.0.0",
+  "description": "Ash IDs - Time-sortable, double-click-selectable unique identifiers using Crockford Base32",
+  "keywords": [
+    "uuid",
+    "id",
+    "identifier",
+    "unique",
+    "ashid",
+    "base32",
+    "crockford",
+    "sortable",
+    "time-based"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test",
+    "prepublishOnly": "pnpm build && pnpm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wilde-agency/ashid.git",
+    "directory": "typescript"
+  },
+  "author": "Wilde Agency <dev@wilde.agency>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wilde-agency/ashid/issues"
+  },
+  "homepage": "https://github.com/wilde-agency/ashid#readme",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
