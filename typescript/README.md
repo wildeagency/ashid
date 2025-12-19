@@ -1,5 +1,11 @@
 # Ashid
 
+[![npm version](https://img.shields.io/npm/v/ashid.svg)](https://www.npmjs.com/package/ashid)
+[![npm downloads](https://img.shields.io/npm/dw/ashid.svg)](https://www.npmjs.com/package/ashid)
+[![bundle size](https://img.shields.io/bundlephobia/minzip/ashid)](https://bundlephobia.com/package/ashid)
+[![license](https://img.shields.io/npm/l/ashid.svg)](https://github.com/wildeagency/ashid/blob/main/LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
+
 **Time-sortable unique identifiers with type prefixes.**
 
 ```
@@ -10,22 +16,35 @@ ashid()         →  1kbg1jmtr9k5v2x8p4m1n3w
 
 ## Why Ashid?
 
-**Know what you're looking at.** UUIDs are opaque. When you see `550e8400-e29b-41d4-a716-446655440000` in a log, is it a user? A transaction? An asset? Ashid prefixes tell you instantly:
+### The Problem
 
-```
-user_1kbg1jmtt...  ← User ID
-tx_1kbg1jmts...    ← Transaction
-asset_1kbg1jmtr... ← Asset
+UUIDs are opaque. When you see `550e8400-e29b-41d4-a716-446655440000` in a log, a URL, or a database query, you have no idea what it represents. Is it a user? A transaction? An asset? You have to grep, cross-reference, and waste debugging time.
+
+### The Solution
+
+Ashid generates IDs that tell you what they are:
+
+```typescript
+user_1kbg1jmtt4v3x8k9p2m1n  // ← Obviously a user
+tx_1kbg1jmts7h2w5r8q4n3m    // ← Obviously a transaction
+asset_1kbg1jmtr9k5v2x8p4m1n // ← Obviously an asset
 ```
 
-**Developer experience matters.** Ashid uses [Crockford Base32](https://www.crockford.com/base32.html):
+### Why Crockford Base32?
+
+Douglas Crockford designed Base32 specifically for human-readable identifiers:
 
 - **Case-insensitive** — `ABC` and `abc` decode identically
-- **Character correction** — `I`/`L`/`l` → `1`, `O`/`o` → `0`
+- **Character correction** — `I`, `L`, `l` → `1` and `O`, `o` → `0` (no more "is that a zero or an O?")
+- **No ambiguous characters** — excludes `I`, `L`, `O`, `U` entirely
 - **Double-click selectable** — no hyphens or special characters
 - **URL-safe** — no encoding required
 
-**Time-sorted by default.** Lexicographic sort = chronological sort. Database indexes cluster naturally.
+This is the same approach Stripe uses for their IDs (`sk_live_...`, `pi_...`, `cus_...`).
+
+### Time-Sorted by Default
+
+ASHID embeds a timestamp, so lexicographic sort = chronological sort. Your database indexes cluster naturally. Your logs are in order. No extra work required.
 
 ## Installation
 
@@ -127,16 +146,49 @@ Random:    13 chars Crockford Base32 (cryptographically secure)
 
 **Timestamp range:** 0 (Unix epoch) to 35184372088831 (Dec 12, 3084)
 
-## Comparison
+## How ASHID Compares
 
-| Feature | Ashid | UUID | ULID | NanoID |
-|---------|-------|------|------|--------|
-| Type prefixes | Yes | No | No | No |
-| Case-insensitive | Yes | No | No | No |
-| Lookalike correction | Yes | No | No | No |
-| Time-sortable | Yes | v1 only | Yes | No |
-| Double-click select | Yes | No | Yes | Yes |
-| Length | 22+ | 36 | 26 | 21 |
+| Feature | ASHID | uuid | nanoid | cuid2 | ulid |
+|---------|-------|------|--------|-------|------|
+| Type prefixes | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
+| Time-sortable | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Human-readable | ✅ Crockford Base32 | ❌ Hex | ⚠️ Base64 | ⚠️ | ⚠️ |
+| Case-insensitive | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Character correction | ✅ I→1, O→0 | ❌ | ❌ | ❌ | ❌ |
+| Double-click selectable | ✅ | ❌ Hyphens | ✅ | ✅ | ✅ |
+| URL-safe | ✅ | ⚠️ Needs encoding | ✅ | ✅ | ✅ |
+| Zero dependencies | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Self-documenting in logs | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+**The key difference:** When you see `user_1kbg1jmtt4v3x8k9p2m1n` in a log, you know it's a user. When you see `550e8400-e29b-41d4-a716-446655440000`, you have to grep.
+
+## Real-World Use Cases
+
+### API Resources
+```typescript
+const userId = ashid('user_');     // user_1kbg1jmtt4v3x8k9p2m1n
+const orderId = ashid('order_');   // order_1kbg1jmts7h2w5r8q4n3m
+const invoiceId = ashid('inv_');   // inv_1kbg1jmtr9k5v2x8p4m1n
+```
+
+### Database Primary Keys
+```typescript
+// IDs sort chronologically without additional indexes
+const posts = await db.query('SELECT * FROM posts ORDER BY id');
+```
+
+### Log Debugging
+```
+[ERROR] Payment failed for user_1kbg1jmtt4v3x8k9p2m1n on order_1kbg1jmts7h2w5r8q4n3m
+// Instantly know: it's a user and an order. No grepping required.
+```
+
+### URL Slugs
+```
+https://app.example.com/users/user_1kbg1jmtt4v3x8k9p2m1n
+https://app.example.com/orders/order_1kbg1jmts7h2w5r8q4n3m
+// Self-documenting URLs that are still opaque enough for security
+```
 
 ## API
 
@@ -159,9 +211,26 @@ Ashid.isValid(id: string): boolean
 Ashid.normalize(id: string): string   // lowercase + fix ambiguous chars
 ```
 
+## Inspired By
+
+ASHID stands on the shoulders of giants:
+
+- [Stripe's ID format](https://stripe.com/docs/api) — The `sk_`, `pi_`, `cus_` prefix convention
+- [Douglas Crockford's Base32](https://www.crockford.com/base32.html) — Human-friendly encoding
+- [ULID](https://github.com/ulid/spec) — Time-sortable unique identifiers
+- [TypeID](https://github.com/jetpack-io/typeid) — Type-safe, K-sortable IDs (similar goals, different implementation)
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
 ## License
 
 MIT
+
+## Author
+
+Created by **Dathan Guiley** at [Wilde Agency](https://wilde.agency) in 2016 for the End of Shopping project.
 
 ---
 

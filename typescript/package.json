@@ -1,6 +1,6 @@
 {
   "name": "ashid",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Ash IDs - Time-sortable, double-click-selectable unique identifiers using Crockford Base32",
   "keywords": [
     "uuid",
@@ -39,15 +39,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/wilde-agency/ashid.git",
+    "url": "https://github.com/wildeagency/ashid.git",
     "directory": "typescript"
   },
-  "author": "Wilde Agency <dev@wilde.agency>",
+  "author": "Dathan Guiley <dathan@wilde.agency> (Wilde Agency)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/wilde-agency/ashid/issues"
+    "url": "https://github.com/wildeagency/ashid/issues"
   },
-  "homepage": "https://github.com/wilde-agency/ashid#readme",
+  "homepage": "https://github.com/wildeagency/ashid#readme",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
