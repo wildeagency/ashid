@@ -1,6 +1,6 @@
-# Contributing to NiceId
+# Contributing to ashid
 
-Thank you for your interest in contributing to NiceId! This project aims to be the reference implementation for time-sortable unique identifiers with type prefixes.
+Thank you for your interest in contributing to ashid! This project aims to be the reference implementation for time-sortable unique identifiers with type prefixes.
 
 ## Code of Conduct
 
@@ -31,7 +31,7 @@ Open an issue with:
 Open an issue with:
 - Use case description
 - Proposed API/interface
-- Why this aligns with NiceId's goals
+- Why this aligns with ashid's goals
 - Alternatives considered
 
 ### Code Contributions
@@ -104,9 +104,9 @@ Open an issue with:
 
 Example:
 ```typescript
-describe('NiceId.create', () => {
-  it('should create NiceId with prefix', () => {
-    const id = NiceId.create('user_');
+describe('Ashid.create', () => {
+  it('should create Ashid with prefix', () => {
+    const id = Ashid.create('user_');
     expect(id).toMatch(/^user_[0-9]/);
   });
 });
@@ -180,4 +180,4 @@ Contributors will be recognized in:
 - Release notes
 - Project documentation
 
-Thank you for helping make NiceId better!
+Thank you for helping make ashid better!

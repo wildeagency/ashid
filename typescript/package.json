@@ -1,6 +1,6 @@
 {
   "name": "ashid",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Ash IDs - Time-sortable, double-click-selectable unique identifiers using Crockford Base32",
   "keywords": [
     "uuid",
@@ -47,7 +47,7 @@
   "bugs": {
     "url": "https://github.com/wildeagency/ashid/issues"
   },
-  "homepage": "https://github.com/wildeagency/ashid#readme",
+  "homepage": "https://github.com/wildeagency/ashid/tree/main/typescript#readme",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",

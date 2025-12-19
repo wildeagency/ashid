@@ -1,5 +1,9 @@
 # ashid
 
+[![npm version](https://img.shields.io/npm/v/ashid.svg)](https://www.npmjs.com/package/ashid)
+[![npm downloads](https://img.shields.io/npm/dw/ashid.svg)](https://www.npmjs.com/package/ashid)
+[![license](https://img.shields.io/npm/l/ashid.svg)](https://github.com/wildeagency/ashid/blob/main/LICENSE)
+
 **Time-sortable unique identifiers with type prefixes.**
 
 ```
@@ -10,198 +14,85 @@ ashid()         →  1kbg1jmtr9k5v2x8p4m1n3w
 
 ## Why ashid?
 
-**Know what you're looking at.** UUIDs are opaque. When you see `550e8400-e29b-41d4-a716-446655440000` in a log, is it a user? A transaction? An asset? ashid prefixes tell you instantly:
+UUIDs are opaque. When you see `550e8400-e29b-41d4-a716-446655440000` in a log, you have no idea what it represents. You have to grep, cross-reference, and waste debugging time.
+
+ashid generates IDs that tell you what they are:
 
 ```
-user_1kbg1jmtt...  ← User ID
-tx_1kbg1jmts...    ← Transaction
-asset_1kbg1jmtr... ← Asset
+user_1kbg1jmtt4v3x8k9p2m1n  ← Obviously a user
+tx_1kbg1jmts7h2w5r8q4n3m    ← Obviously a transaction
+asset_1kbg1jmtr9k5v2x8p4m1n ← Obviously an asset
 ```
 
-**Developer experience matters.** ashid uses [Crockford Base32](https://www.crockford.com/base32.html):
+### Key Features
 
-- **Case-insensitive** — `ABC` and `abc` decode identically
-- **Character correction** — `I`/`L`/`l` → `1`, `O`/`o` → `0`
-- **Double-click selectable** — no hyphens or special characters
-- **URL-safe** — no encoding required
+- **Type prefixes** — Self-documenting IDs, just like Stripe (`sk_`, `pi_`, `cus_`)
+- **Time-sortable** — Lexicographic sort = chronological sort
+- **Crockford Base32** — Case-insensitive, `I`/`L`→`1`, `O`→`0` (no more "is that a zero or an O?")
+- **Double-click selectable** — No hyphens or special characters
+- **URL-safe** — No encoding required
+- **Zero dependencies**
 
-**Time-sorted by default.** Lexicographic sort = chronological sort. Database indexes cluster naturally.
+## Packages
 
-## Installation
+| Package | Platform | Install |
+|---------|----------|---------|
+| [ashid](./typescript/) | TypeScript/JavaScript | `npm install ashid` |
+| ashid | Kotlin/Java | `implementation("agency.wilde:ashid:1.0.0")` |
+
+## Quick Start
 
 ### TypeScript/JavaScript
-
-```bash
-npm install ashid
-```
 
 ```typescript
 import { ashid } from 'ashid';
 
 const userId = ashid('user_');   // "user_1kbg1jmtt4v3x8k9p2m1n"
-const shortId = ashid('u');      // "u1kbg1jmtt4v3x8k9p2m1n0w"
 const rawId = ashid();           // "1kbg1jmtt4v3x8k9p2m1n0w"
 ```
 
-### Kotlin/Java
+See the [TypeScript README](./typescript/README.md) for full API documentation.
 
-```kotlin
-dependencies {
-    implementation("agency.wilde:ashid:1.0.0")
-}
-```
+### Kotlin/Java
 
 ```kotlin
 import agency.wilde.ashid.ashid
 
 val userId = ashid("user_")   // "user_1kbg1jmtt4v3x8k9p2m1n"
-val shortId = ashid("u")      // "u1kbg1jmtt4v3x8k9p2m1n0w"
 val rawId = ashid()           // "1kbg1jmtt4v3x8k9p2m1n0w"
 ```
 
-## Prefix Formats
+## How ashid Compares
 
-ashid supports two formats based on prefix style:
+| Feature | ashid | uuid | nanoid | cuid2 | ulid |
+|---------|-------|------|--------|-------|------|
+| Type prefixes | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
+| Time-sortable | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Human-readable | ✅ Crockford Base32 | ❌ Hex | ⚠️ Base64 | ⚠️ | ⚠️ |
+| Case-insensitive | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Character correction | ✅ I→1, O→0 | ❌ | ❌ | ❌ | ❌ |
+| Double-click selectable | ✅ | ❌ Hyphens | ✅ | ✅ | ✅ |
+| URL-safe | ✅ | ⚠️ Needs encoding | ✅ | ✅ | ✅ |
+| Zero dependencies | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### With underscore delimiter (variable length)
-```typescript
-ashid('user_')   // user_1kbg1jmtt4v3x8k9p2m1n
-ashid('order_')  // order_1kbg1jmts7h2w5r8q4n3m
-```
-- Timestamp: variable length (no padding)
-- Random: 13 chars (padded)
-- Underscore acts as delimiter for reliable parsing
+## Inspired By
 
-### Without underscore (fixed 22-char base)
-```typescript
-ashid('u')   // u1kbg1jmtt4v3x8k9p2m1n0w (1 + 22 = 23 chars)
-ashid()      // 1kbg1jmtt4v3x8k9p2m1n0w  (22 chars)
-```
-- Timestamp: 9 chars (zero-padded)
-- Random: 13 chars (padded)
-- Fixed length enables parsing without delimiter
+- [Stripe's ID format](https://stripe.com/docs/api) — The `sk_`, `pi_`, `cus_` prefix convention
+- [Douglas Crockford's Base32](https://www.crockford.com/base32.html) — Human-friendly encoding
+- [ULID](https://github.com/ulid/spec) — Time-sortable unique identifiers
+- [TypeID](https://github.com/jetpack-io/typeid) — Type-safe, K-sortable IDs
 
-## Features
+## Contributing
 
-### Crockford Base32
-
-The encoding excludes ambiguous characters and maps lookalikes during decoding:
-
-| If you type | Decodes as |
-|-------------|------------|
-| `I`, `i`, `L`, `l` | `1` |
-| `O`, `o` | `0` |
-| `U`, `u` | `v` |
-
-Read IDs aloud without confusion. Type without shift key. Copy without encoding errors.
-
-### Time-Sorted
-
-```typescript
-const id1 = ashid('tx_');  // Created at T
-const id2 = ashid('tx_');  // Created at T+1ms
-
-id1 < id2  // true — lexicographic sort is chronological
-```
-
-Benefits:
-- Database indexes cluster by creation time
-- Range queries work naturally
-- Pagination is straightforward
-
-### Parsing & Extraction
-
-```typescript
-import { Ashid, parseAshid } from 'ashid';
-
-const id = ashid('user_');
-
-// Validate
-Ashid.isValid(id);  // true
-
-// Parse components (returns [prefix, encodedTimestamp, encodedRandom])
-const [prefix, ts, rand] = parseAshid(id);
-
-// Extract as native types
-Ashid.prefix(id);     // "user_"
-Ashid.timestamp(id);  // 1733140800000 (milliseconds)
-Ashid.random(id);     // 8234567890123
-
-// Normalize (lowercase + fix ambiguous chars like I→1, O→0)
-Ashid.normalize('USER_1KBG1JMTT...');  // "user_1kbg1jmtt..."
-```
-
-## Format
-
-```
-[prefix][timestamp][random]
-   ↓        ↓         ↓
- user_  1kbg1jmtt  4v3x8k9p2m1n
-
-Prefix:    Letters + optional underscore (user defined)
-Timestamp: Variable or 9 chars Crockford Base32 (milliseconds since epoch)
-Random:    13 chars Crockford Base32 (cryptographically secure)
-```
-
-**Timestamp range:** 0 (Unix epoch) to 35184372088831 (Dec 12, 3084)
-
-## Comparison
-
-| Feature | Ashid | UUID | ULID | NanoID |
-|---------|-------|------|------|--------|
-| Type prefixes | Yes | No | No | No |
-| Case-insensitive | Yes | No | No | No |
-| Lookalike correction | Yes | No | No | No |
-| Time-sortable | Yes | v1 only | Yes | No |
-| Double-click select | Yes | No | Yes | Yes |
-| Length | 22+ | 36 | 26 | 21 |
-
-## API
-
-### TypeScript
-
-```typescript
-// Create (defaults: time = Date.now(), random = secure random)
-ashid(prefix?: string): string
-Ashid.create(prefix?: string, time?: number, randomLong?: number): string
-
-// Parse - returns [prefix, encodedTimestamp, encodedRandom]
-parseAshid(id: string): [string, string, string]
-Ashid.parse(id: string): [string, string, string]
-
-// Extract components
-Ashid.prefix(id: string): string      // "" if none
-Ashid.timestamp(id: string): number   // milliseconds
-Ashid.random(id: string): number      // random value
-
-// Utilities
-Ashid.isValid(id: string): boolean
-Ashid.normalize(id: string): string   // lowercase + fix ambiguous chars
-```
-
-### Kotlin
-
-```kotlin
-// Create (defaults: time = System.currentTimeMillis(), random = secure random)
-ashid(prefix: String? = null): String
-Ashid.create(prefix: String? = null, time: Long, randomLong: Long): String
-
-// Parse - returns Triple<prefix, encodedTimestamp, encodedRandom>
-Ashid.parse(id: String): Triple<String, String, String>
-
-// Extract components
-Ashid.prefix(id: String): String      // "" if none
-Ashid.timestamp(id: String): Long     // milliseconds
-Ashid.random(id: String): Long        // random value
-
-// Utilities
-Ashid.isValid(id: String): Boolean
-Ashid.normalize(id: String): String   // lowercase + fix ambiguous chars
-```
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## License
 
 MIT
+
+## Author
+
+Created by **Dathan Guiley** at [Wilde Agency](https://wilde.agency).
 
 ---
 

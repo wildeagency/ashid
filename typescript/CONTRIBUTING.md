@@ -1,6 +1,6 @@
-# Contributing to ASHID
+# Contributing to ashid
 
-Thanks for your interest in contributing to ASHID!
+Thanks for your interest in contributing to ashid!
 
 ## Getting Started
 

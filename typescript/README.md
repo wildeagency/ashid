@@ -1,4 +1,4 @@
-# Ashid
+# ashid
 
 [![npm version](https://img.shields.io/npm/v/ashid.svg)](https://www.npmjs.com/package/ashid)
 [![npm downloads](https://img.shields.io/npm/dw/ashid.svg)](https://www.npmjs.com/package/ashid)
@@ -14,7 +14,21 @@ ashid("tx_")    →  tx_1kbg1jmts7h2w5r8q4n3m
 ashid()         →  1kbg1jmtr9k5v2x8p4m1n3w
 ```
 
-## Why Ashid?
+## Installation
+
+```bash
+npm install ashid
+```
+
+```typescript
+import { ashid } from 'ashid';
+
+const userId = ashid('user_');   // "user_1kbg1jmtt4v3x8k9p2m1n"
+const shortId = ashid('u');      // "u1kbg1jmtt4v3x8k9p2m1n0w"
+const rawId = ashid();           // "1kbg1jmtt4v3x8k9p2m1n0w"
+```
+
+## Why ashid?
 
 ### The Problem
 
@@ -22,7 +36,7 @@ UUIDs are opaque. When you see `550e8400-e29b-41d4-a716-446655440000` in a log, 
 
 ### The Solution
 
-Ashid generates IDs that tell you what they are:
+ashid generates IDs that tell you what they are:
 
 ```typescript
 user_1kbg1jmtt4v3x8k9p2m1n  // ← Obviously a user
@@ -44,25 +58,11 @@ This is the same approach Stripe uses for their IDs (`sk_live_...`, `pi_...`, `c
 
 ### Time-Sorted by Default
 
-ASHID embeds a timestamp, so lexicographic sort = chronological sort. Your database indexes cluster naturally. Your logs are in order. No extra work required.
-
-## Installation
-
-```bash
-npm install ashid
-```
-
-```typescript
-import { ashid } from 'ashid';
-
-const userId = ashid('user_');   // "user_1kbg1jmtt4v3x8k9p2m1n"
-const shortId = ashid('u');      // "u1kbg1jmtt4v3x8k9p2m1n0w"
-const rawId = ashid();           // "1kbg1jmtt4v3x8k9p2m1n0w"
-```
+ashid embeds a timestamp, so lexicographic sort = chronological sort. Your database indexes cluster naturally. Your logs are in order. No extra work required.
 
 ## Prefix Formats
 
-Ashid supports two formats based on prefix style:
+ashid supports two formats based on prefix style:
 
 ### With underscore delimiter (variable length)
 ```typescript
@@ -82,54 +82,84 @@ ashid()      // 1kbg1jmtt4v3x8k9p2m1n0w  (22 chars)
 - Random: 13 chars (padded)
 - Fixed length enables parsing without delimiter
 
-## Features
+## API Reference
 
-### Crockford Base32
+### `ashid(prefix?: string): string`
 
-The encoding excludes ambiguous characters and maps lookalikes during decoding:
-
-| If you type | Decodes as |
-|-------------|------------|
-| `I`, `i`, `L`, `l` | `1` |
-| `O`, `o` | `0` |
-| `U`, `u` | `v` |
-
-Read IDs aloud without confusion. Type without shift key. Copy without encoding errors.
-
-### Time-Sorted
+Generate a new ID with optional prefix.
 
 ```typescript
-const id1 = ashid('tx_');  // Created at T
-const id2 = ashid('tx_');  // Created at T+1ms
+import { ashid } from 'ashid';
 
-id1 < id2  // true — lexicographic sort is chronological
+ashid();          // "1kbg1jmtt4v3x8k9p2m1n0w"
+ashid('u');       // "u1kbg1jmtt4v3x8k9p2m1n0w"
+ashid('user_');   // "user_1kbg1jmtt4v3x8k9p2m1n"
 ```
 
-Benefits:
-- Database indexes cluster by creation time
-- Range queries work naturally
-- Pagination is straightforward
+### `Ashid.create(prefix?, time?, randomLong?): string`
 
-### Parsing & Extraction
+Create an ID with explicit timestamp and random values (useful for testing).
 
 ```typescript
-import { Ashid, parseAshid } from 'ashid';
+import { Ashid } from 'ashid';
 
-const id = ashid('user_');
+Ashid.create('user_', 1733140800000, 8234567890123n);
+```
 
-// Validate
-Ashid.isValid(id);  // true
+### `parseAshid(id: string): [string, string, string]`
 
-// Parse components (returns [prefix, encodedTimestamp, encodedRandom])
-const [prefix, ts, rand] = parseAshid(id);
+Parse an ID into components: `[prefix, encodedTimestamp, encodedRandom]`.
 
-// Extract as native types
-Ashid.prefix(id);     // "user_"
-Ashid.timestamp(id);  // 1733140800000 (milliseconds)
-Ashid.random(id);     // 8234567890123
+```typescript
+import { parseAshid } from 'ashid';
 
-// Normalize (lowercase + fix ambiguous chars like I→1, O→0)
-Ashid.normalize('USER_1KBG1JMTT...');  // "user_1kbg1jmtt..."
+const [prefix, ts, rand] = parseAshid('user_1kbg1jmtt4v3x8k9p2m1n');
+// prefix = "user_"
+// ts = "1kbg1jmtt"
+// rand = "4v3x8k9p2m1n"
+```
+
+### `Ashid.prefix(id: string): string`
+
+Extract the prefix from an ID.
+
+```typescript
+Ashid.prefix('user_1kbg1jmtt4v3x8k9p2m1n');  // "user_"
+Ashid.prefix('1kbg1jmtt4v3x8k9p2m1n0w');     // ""
+```
+
+### `Ashid.timestamp(id: string): number`
+
+Extract the timestamp (milliseconds since epoch).
+
+```typescript
+Ashid.timestamp('user_1kbg1jmtt4v3x8k9p2m1n');  // 1733140800000
+```
+
+### `Ashid.random(id: string): bigint`
+
+Extract the random portion.
+
+```typescript
+Ashid.random('user_1kbg1jmtt4v3x8k9p2m1n');  // 8234567890123n
+```
+
+### `Ashid.isValid(id: string): boolean`
+
+Validate an ID.
+
+```typescript
+Ashid.isValid('user_1kbg1jmtt4v3x8k9p2m1n');  // true
+Ashid.isValid('invalid');                      // false
+```
+
+### `Ashid.normalize(id: string): string`
+
+Normalize an ID (lowercase + fix ambiguous characters).
+
+```typescript
+Ashid.normalize('USER_1KBG1JMTT4V3X8K9P2M1N');  // "user_1kbg1jmtt4v3x8k9p2m1n"
+Ashid.normalize('user_IKBGIJMTT...');           // "user_1kbg1jmtt..." (I→1)
 ```
 
 ## Format
@@ -146,21 +176,17 @@ Random:    13 chars Crockford Base32 (cryptographically secure)
 
 **Timestamp range:** 0 (Unix epoch) to 35184372088831 (Dec 12, 3084)
 
-## How ASHID Compares
+## Crockford Base32 Encoding
 
-| Feature | ASHID | uuid | nanoid | cuid2 | ulid |
-|---------|-------|------|--------|-------|------|
-| Type prefixes | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Time-sortable | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Human-readable | ✅ Crockford Base32 | ❌ Hex | ⚠️ Base64 | ⚠️ | ⚠️ |
-| Case-insensitive | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Character correction | ✅ I→1, O→0 | ❌ | ❌ | ❌ | ❌ |
-| Double-click selectable | ✅ | ❌ Hyphens | ✅ | ✅ | ✅ |
-| URL-safe | ✅ | ⚠️ Needs encoding | ✅ | ✅ | ✅ |
-| Zero dependencies | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Self-documenting in logs | ✅ | ❌ | ❌ | ❌ | ❌ |
+The encoding excludes ambiguous characters and maps lookalikes during decoding:
 
-**The key difference:** When you see `user_1kbg1jmtt4v3x8k9p2m1n` in a log, you know it's a user. When you see `550e8400-e29b-41d4-a716-446655440000`, you have to grep.
+| If you type | Decodes as |
+|-------------|------------|
+| `I`, `i`, `L`, `l` | `1` |
+| `O`, `o` | `0` |
+| `U`, `u` | `v` |
+
+Read IDs aloud without confusion. Type without shift key. Copy without encoding errors.
 
 ## Real-World Use Cases
 
@@ -190,30 +216,25 @@ https://app.example.com/orders/order_1kbg1jmts7h2w5r8q4n3m
 // Self-documenting URLs that are still opaque enough for security
 ```
 
-## API
+## How ashid Compares
 
-```typescript
-// Create (defaults: time = Date.now(), random = secure random)
-ashid(prefix?: string): string
-Ashid.create(prefix?: string, time?: number, randomLong?: number): string
+| Feature | ashid | uuid | nanoid | cuid2 | ulid |
+|---------|-------|------|--------|-------|------|
+| Type prefixes | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
+| Time-sortable | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Human-readable | ✅ Crockford Base32 | ❌ Hex | ⚠️ Base64 | ⚠️ | ⚠️ |
+| Case-insensitive | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Character correction | ✅ I→1, O→0 | ❌ | ❌ | ❌ | ❌ |
+| Double-click selectable | ✅ | ❌ Hyphens | ✅ | ✅ | ✅ |
+| URL-safe | ✅ | ⚠️ Needs encoding | ✅ | ✅ | ✅ |
+| Zero dependencies | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Self-documenting in logs | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-// Parse - returns [prefix, encodedTimestamp, encodedRandom]
-parseAshid(id: string): [string, string, string]
-Ashid.parse(id: string): [string, string, string]
-
-// Extract components
-Ashid.prefix(id: string): string      // "" if none
-Ashid.timestamp(id: string): number   // milliseconds
-Ashid.random(id: string): number      // random value
-
-// Utilities
-Ashid.isValid(id: string): boolean
-Ashid.normalize(id: string): string   // lowercase + fix ambiguous chars
-```
+**The key difference:** When you see `user_1kbg1jmtt4v3x8k9p2m1n` in a log, you know it's a user. When you see `550e8400-e29b-41d4-a716-446655440000`, you have to grep.
 
 ## Inspired By
 
-ASHID stands on the shoulders of giants:
+ashid stands on the shoulders of giants:
 
 - [Stripe's ID format](https://stripe.com/docs/api) — The `sk_`, `pi_`, `cus_` prefix convention
 - [Douglas Crockford's Base32](https://www.crockford.com/base32.html) — Human-friendly encoding
@@ -230,7 +251,7 @@ MIT
 
 ## Author
 
-Created by **Dathan Guiley** at [Wilde Agency](https://wilde.agency) in 2016 for the End of Shopping project.
+Created by **Dathan Guiley** at [Wilde Agency](https://wilde.agency).
 
 ---
 
