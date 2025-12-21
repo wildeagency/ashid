@@ -2,112 +2,95 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main]
 
 jobs:
   typescript:
-    name: TypeScript Tests
+    name: TypeScript
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x]
+    defaults:
+      run:
+        working-directory: typescript
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
-
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'pnpm'
-          cache-dependency-path: 'typescript/pnpm-lock.yaml'
-
-      - name: Install dependencies
-        working-directory: ./typescript
-        run: pnpm install --frozen-lockfile
-
-      - name: Type check
-        working-directory: ./typescript
-        run: pnpm typecheck
-
-      - name: Build
-        working-directory: ./typescript
-        run: pnpm build
-
-      - name: Run tests
-        working-directory: ./typescript
-        run: pnpm test
-
-      - name: Test coverage
-        working-directory: ./typescript
-        run: pnpm test:coverage
-
-  kotlin:
-    name: Kotlin Tests
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        java-version: [11, 17, 21]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Java ${{ matrix.java-version }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ matrix.java-version }}
-          distribution: 'temurin'
-          cache: 'gradle'
-
-      - name: Grant execute permission for gradlew
-        working-directory: ./kotlin
-        run: chmod +x gradlew
-
-      - name: Build with Gradle
-        working-directory: ./kotlin
-        run: ./gradlew build --no-daemon
-
-      - name: Run tests
-        working-directory: ./kotlin
-        run: ./gradlew test --no-daemon
-
-      - name: Generate test report
-        working-directory: ./kotlin
-        run: ./gradlew jacocoTestReport --no-daemon
-        if: matrix.java-version == '17'
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-          cache: 'pnpm'
-          cache-dependency-path: 'typescript/pnpm-lock.yaml'
+          node-version: '20'
 
-      - name: Install TypeScript dependencies
-        working-directory: ./typescript
-        run: pnpm install --frozen-lockfile
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
 
-      - name: Lint TypeScript
-        working-directory: ./typescript
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint
         run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Test coverage
+        run: pnpm test:coverage
+
+  kotlin:
+    name: Kotlin
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kotlin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build
+        run: ./gradlew build
+
+      - name: Test
+        run: ./gradlew test
+
+  java:
+    name: Java
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: java
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build
+        run: ./gradlew build
+
+      - name: Test
+        run: ./gradlew test

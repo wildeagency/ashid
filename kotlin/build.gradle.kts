@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     kotlin("jvm") version "1.9.22"
     `java-library`
@@ -78,25 +80,18 @@ publishing {
 
     repositories {
         maven {
-            name = "OSSRH"
-            url = uri(if (version.toString().endsWith("SNAPSHOT")) {
-                "https://s01.oss.sonatype.org/content/repositories/snapshots/"
-            } else {
-                "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
-            })
-            credentials {
-                username = System.getenv("OSSRH_USERNAME")
-                password = System.getenv("OSSRH_PASSWORD")
-            }
+            name = "Local"
+            url = uri(layout.buildDirectory.dir("repo"))
         }
     }
 }
 
 signing {
     // Only sign if publishing to Maven Central
-    val signingKey = System.getenv("SIGNING_KEY")
-    val signingPassword = System.getenv("SIGNING_PASSWORD")
-    if (signingKey != null && signingPassword != null) {
+    val signingKeyBase64 = System.getenv("GPG_SIGNING_KEY")
+    val signingPassword = System.getenv("GPG_SIGNING_PASSWORD") ?: ""
+    if (!signingKeyBase64.isNullOrEmpty()) {
+        val signingKey = String(Base64.getDecoder().decode(signingKeyBase64))
         useInMemoryPgpKeys(signingKey, signingPassword)
         sign(publishing.publications["maven"])
     }

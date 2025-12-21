@@ -115,6 +115,7 @@ export class Ashid {
     let prefixLength = 0;
     let hasDelimiter = false;
 
+    // First pass: find if there's a delimiter
     for (let i = 0; i < id.length; i++) {
       if (/^[a-zA-Z]$/.test(id[i])) {
         prefixLength++;
@@ -124,6 +125,18 @@ export class Ashid {
         break;
       } else {
         break;
+      }
+    }
+
+    // If no delimiter found, limit prefix so that base is exactly 22 chars
+    if (!hasDelimiter && id.length > 22) {
+      prefixLength = id.length - 22;
+      // Validate that the prefix is all letters
+      for (let i = 0; i < prefixLength; i++) {
+        if (!/^[a-zA-Z]$/.test(id[i])) {
+          prefixLength = 0; // No valid prefix
+          break;
+        }
       }
     }
 

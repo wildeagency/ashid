@@ -44,11 +44,16 @@ object Ashid {
         time: Long = System.currentTimeMillis(),
         randomLong: Long = EncoderBase32Crockford.secureRandomLong()
     ): String {
-        // Validate prefix: must be alphabetic with optional trailing underscore
-        if (!prefix.isNullOrEmpty()) {
-            require(prefix.matches(Regex("^[a-zA-Z]+_?$"))) {
-                "Ashid prefix must contain only letters with optional trailing underscore"
+        // Validate and normalize prefix: must be alphabetic with optional trailing underscore/dash
+        val normalizedPrefix = if (!prefix.isNullOrEmpty()) {
+            // Convert dash to underscore for consistency with TypeScript
+            val withUnderscore = prefix.replace(Regex("-$"), "_")
+            require(withUnderscore.matches(Regex("^[a-zA-Z]+_?$"))) {
+                "Ashid prefix must contain only letters with optional trailing underscore or dash"
             }
+            withUnderscore.lowercase()
+        } else {
+            null
         }
 
         // Validate timestamp
@@ -59,7 +64,7 @@ object Ashid {
         require(randomLong >= 0) { "Ashid random value must be non-negative" }
 
         // Determine if prefix has underscore delimiter
-        val hasDelimiter = prefix?.endsWith('_') == true
+        val hasDelimiter = normalizedPrefix?.endsWith('_') == true
 
         val baseId = if (hasDelimiter) {
             // Variable length: no padding on timestamp, pad random only when timestamp > 0
@@ -81,7 +86,7 @@ object Ashid {
             timeEncoded + randomEncoded
         }
 
-        return (prefix ?: "") + baseId
+        return (normalizedPrefix ?: "") + baseId
     }
 
     /**
@@ -94,14 +99,15 @@ object Ashid {
     fun parse(id: String): Triple<String, String, String> {
         require(id.isNotEmpty()) { "Invalid Ashid: cannot be empty" }
 
-        // Find the prefix: leading alphabetic characters with optional trailing underscore
+        // Find the prefix: leading alphabetic characters with optional trailing underscore or dash
         var prefixLength = 0
         var hasDelimiter = false
 
+        // First pass: find if there's a delimiter
         for (i in id.indices) {
             when {
                 id[i].isLetter() -> prefixLength++
-                id[i] == '_' && prefixLength > 0 -> {
+                (id[i] == '_' || id[i] == '-') && prefixLength > 0 -> {
                     prefixLength++
                     hasDelimiter = true
                     break
@@ -110,7 +116,20 @@ object Ashid {
             }
         }
 
-        val prefix = id.substring(0, prefixLength)
+        // If no delimiter found, limit prefix so that base is exactly 22 chars
+        if (!hasDelimiter && id.length > 22) {
+            prefixLength = id.length - 22
+            // Validate that the prefix is all letters
+            for (i in 0 until prefixLength) {
+                if (!id[i].isLetter()) {
+                    prefixLength = 0 // No valid prefix
+                    break
+                }
+            }
+        }
+
+        // Normalize dash to underscore in prefix
+        val prefix = id.substring(0, prefixLength).replace(Regex("-$"), "_")
         val baseId = id.substring(prefixLength)
 
         require(baseId.isNotEmpty()) { "Invalid Ashid: must have a base ID after prefix" }
