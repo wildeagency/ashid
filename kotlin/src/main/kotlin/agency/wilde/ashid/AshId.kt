@@ -116,8 +116,30 @@ object Ashid {
             }
         }
 
-        // If no delimiter found, limit prefix so that base is exactly 22 chars
-        if (!hasDelimiter && id.length > 22) {
+        // If no delimiter found, determine prefix based on base length
+        // Base can be 22 chars (standard) or 26 chars (ashid4 format)
+        if (!hasDelimiter && id.length > 26) {
+            prefixLength = id.length - 26
+            // Check if this could be a 26-char base (ashid4)
+            // Validate that the prefix is all letters
+            var valid26 = true
+            for (i in 0 until prefixLength) {
+                if (!id[i].isLetter()) {
+                    valid26 = false
+                    break
+                }
+            }
+            if (!valid26) {
+                // Try 22-char base instead
+                prefixLength = id.length - 22
+                for (i in 0 until prefixLength) {
+                    if (!id[i].isLetter()) {
+                        prefixLength = 0 // No valid prefix
+                        break
+                    }
+                }
+            }
+        } else if (!hasDelimiter && id.length > 22 && id.length != 26) {
             prefixLength = id.length - 22
             // Validate that the prefix is all letters
             for (i in 0 until prefixLength) {
@@ -143,10 +165,13 @@ object Ashid {
                 // Timestamp present, random is last 13 chars
                 baseId.substring(0, baseId.length - 13) to baseId.substring(baseId.length - 13)
             }
+        } else if (baseId.length == 26) {
+            // Fixed 26-char format (ashid4 - two random components)
+            baseId.substring(0, 13) to baseId.substring(13)
         } else {
-            // Fixed 22-char format
+            // Fixed 22-char format (standard ashid)
             require(baseId.length == 22) {
-                "Invalid Ashid: base ID must be 22 characters without underscore delimiter (got ${baseId.length})"
+                "Invalid Ashid: base ID must be 22 or 26 characters without underscore delimiter (got ${baseId.length})"
             }
             baseId.substring(0, 9) to baseId.substring(9)
         }
@@ -205,6 +230,48 @@ object Ashid {
     }
 
     /**
+     * Create a random Ashid (UUID v4 equivalent) with consistent 0-padded format
+     *
+     * Unlike create() which uses timestamp + random for time-sortability,
+     * create4() uses two random values with consistent padding for maximum entropy.
+     * Both components are padded to 13 chars each = 26 char base (~106 bits of entropy).
+     *
+     * @param prefix Optional alphabetic prefix (may include trailing underscore as delimiter)
+     * @param random1 First random number (defaults to secure random)
+     * @param random2 Second random number (defaults to secure random)
+     * @return Ashid string with two random components, consistently padded
+     * @throws IllegalArgumentException if random values are negative
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun create4(
+        prefix: String? = null,
+        random1: Long = EncoderBase32Crockford.secureRandomLong(),
+        random2: Long = EncoderBase32Crockford.secureRandomLong()
+    ): String {
+        // Validate and normalize prefix
+        val normalizedPrefix = if (!prefix.isNullOrEmpty()) {
+            val withUnderscore = prefix.replace(Regex("-$"), "_")
+            require(withUnderscore.matches(Regex("^[a-zA-Z]+_?$"))) {
+                "Ashid prefix must contain only letters with optional trailing underscore or dash"
+            }
+            withUnderscore.lowercase()
+        } else {
+            null
+        }
+
+        // Validate random values
+        require(random1 >= 0 && random2 >= 0) { "Ashid random values must be non-negative" }
+
+        // Both components padded to 13 chars for maximum entropy (26 char base)
+        val encoded1 = EncoderBase32Crockford.encode(random1, padded = true) // padded to 13
+        val encoded2 = EncoderBase32Crockford.encode(random2, padded = true) // padded to 13
+        val baseId = encoded1 + encoded2
+
+        return (normalizedPrefix ?: "") + baseId
+    }
+
+    /**
      * Validate if a string is a valid Ashid
      *
      * @param id String to validate
@@ -241,3 +308,16 @@ object Ashid {
  * @return Ashid string
  */
 fun ashid(prefix: String? = null): String = Ashid.create(prefix)
+
+/**
+ * Create a new Ashid with two random components (UUID v4 equivalent)
+ *
+ * Unlike the standard ashid() which uses timestamp + random for time-sortability,
+ * ashid4() uses two random values for maximum entropy when time-sorting is not needed.
+ * Always produces consistently 0-padded output (22 char base).
+ * Useful for tokens, secrets, or any ID where unpredictability is more important than ordering.
+ *
+ * @param prefix Optional entity type prefix (letters with optional trailing underscore)
+ * @return Ashid string with two random components, consistently padded
+ */
+fun ashid4(prefix: String? = null): String = Ashid.create4(prefix)

@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "agency.wilde"
-version = "1.0.0"
+version = "1.1.0"
 
 repositories {
     mavenCentral()
@@ -52,7 +52,7 @@ publishing {
             pom {
                 name.set("ashid")
                 description.set("Ash IDs - Time-sortable, double-click-selectable unique identifiers using Crockford Base32")
-                url.set("https://github.com/wilde-agency/ashid")
+                url.set("https://github.com/wildeagency/ashid")
 
                 licenses {
                     license {
@@ -63,16 +63,17 @@ publishing {
 
                 developers {
                     developer {
-                        id.set("wilde-agency")
-                        name.set("Wilde Agency")
-                        url.set("https://wilde.agency")
+                        id.set("dathan")
+                        name.set("Dathan Guiley")
+                        email.set("dathan@wilde.agency")
+                        organization.set("Wilde Agency")
                     }
                 }
 
                 scm {
-                    connection.set("scm:git:git://github.com/wilde-agency/ashid.git")
-                    developerConnection.set("scm:git:ssh://github.com/wilde-agency/ashid.git")
-                    url.set("https://github.com/wilde-agency/ashid")
+                    connection.set("scm:git:git://github.com/wildeagency/ashid.git")
+                    developerConnection.set("scm:git:ssh://github.com/wildeagency/ashid.git")
+                    url.set("https://github.com/wildeagency/ashid")
                 }
             }
         }
@@ -80,8 +81,12 @@ publishing {
 
     repositories {
         maven {
-            name = "Local"
-            url = uri(layout.buildDirectory.dir("repo"))
+            name = "OSSRH"
+            url = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+            credentials {
+                username = System.getenv("MAVEN_USERNAME")
+                password = System.getenv("MAVEN_PASSWORD")
+            }
         }
     }
 }

@@ -128,8 +128,29 @@ export class Ashid {
       }
     }
 
-    // If no delimiter found, limit prefix so that base is exactly 22 chars
-    if (!hasDelimiter && id.length > 22) {
+    // If no delimiter found, determine prefix based on base length
+    // Base can be 22 chars (standard) or 26 chars (ashid4 format)
+    if (!hasDelimiter && id.length > 26) {
+      prefixLength = id.length - 26;
+      // Check if this could be a 26-char base (ashid4)
+      let valid26 = true;
+      for (let i = 0; i < prefixLength; i++) {
+        if (!/^[a-zA-Z]$/.test(id[i])) {
+          valid26 = false;
+          break;
+        }
+      }
+      if (!valid26) {
+        // Try 22-char base instead
+        prefixLength = id.length - 22;
+        for (let i = 0; i < prefixLength; i++) {
+          if (!/^[a-zA-Z]$/.test(id[i])) {
+            prefixLength = 0; // No valid prefix
+            break;
+          }
+        }
+      }
+    } else if (!hasDelimiter && id.length > 22 && id.length !== 26) {
       prefixLength = id.length - 22;
       // Validate that the prefix is all letters
       for (let i = 0; i < prefixLength; i++) {
@@ -162,10 +183,14 @@ export class Ashid {
         encodedTimestamp = baseId.slice(0, -13);
         encodedRandom = baseId.slice(-13);
       }
+    } else if (baseId.length === 26) {
+      // Fixed 26-char format (ashid4 - two random components)
+      encodedTimestamp = baseId.slice(0, 13);
+      encodedRandom = baseId.slice(13);
     } else {
-      // Fixed 22-char format
+      // Fixed 22-char format (standard ashid)
       if (baseId.length !== 22) {
-        throw new Error(`Invalid Ashid: base ID must be 22 characters without underscore delimiter (got ${baseId.length})`);
+        throw new Error(`Invalid Ashid: base ID must be 22 or 26 characters without underscore delimiter (got ${baseId.length})`);
       }
       encodedTimestamp = baseId.slice(0, 9);
       encodedRandom = baseId.slice(9);
@@ -251,6 +276,46 @@ export class Ashid {
     return this.create(normalizedPrefix, timestamp, random);
   }
 
+  /**
+   * Create a random Ashid (UUID v4 equivalent) with consistent 0-padded format
+   *
+   * Unlike create() which uses timestamp + random for time-sortability,
+   * create4() uses two random values with consistent padding for maximum entropy.
+   * Both components are padded to 13 chars each = 26 char base (~106 bits of entropy).
+   *
+   * @param prefix Optional alphabetic prefix (may include trailing underscore as delimiter)
+   * @param random1 First random number (defaults to secure random)
+   * @param random2 Second random number (defaults to secure random)
+   * @returns Ashid string with two random components, consistently padded
+   */
+  static create4(
+    prefix?: string,
+    random1: number = EncoderBase32Crockford.secureRandomLong(),
+    random2: number = EncoderBase32Crockford.secureRandomLong()
+  ): string {
+    // Validate and normalize prefix
+    if (prefix !== undefined && prefix !== '') {
+      if (!/^[a-zA-Z]+_?$/.test(prefix)) {
+        throw new Error('Ashid prefix must contain only letters with optional trailing underscore');
+      }
+      prefix = prefix.toLowerCase();
+    }
+
+    // Validate random values
+    const flooredRandom1 = Math.floor(random1);
+    const flooredRandom2 = Math.floor(random2);
+    if (flooredRandom1 < 0 || flooredRandom2 < 0) {
+      throw new Error('Ashid random values must be non-negative');
+    }
+
+    // Both components padded to 13 chars for maximum entropy (26 char base)
+    const encoded1 = EncoderBase32Crockford.encode(flooredRandom1, true); // padded to 13
+    const encoded2 = EncoderBase32Crockford.encode(flooredRandom2, true); // padded to 13
+    const baseId = encoded1 + encoded2;
+
+    return (prefix || '') + baseId;
+  }
+
 }
 
 /**
@@ -261,6 +326,27 @@ export class Ashid {
  */
 export function ashid(prefix?: string): string {
   return Ashid.create(prefix);
+}
+
+/**
+ * Create a new Ashid with two random components (UUID v4 equivalent)
+ *
+ * Unlike the standard ashid() which uses timestamp + random for time-sortability,
+ * ashid4() uses two random values for maximum entropy when time-sorting is not needed.
+ * Always produces consistently 0-padded output (26 char base = 13 + 13, ~106 bits entropy).
+ * Useful for tokens, secrets, or any ID where unpredictability is more important than ordering.
+ *
+ * @param prefix Optional entity type prefix (letters with optional trailing underscore)
+ * @returns Ashid string with two random components, consistently padded
+ *
+ * @example
+ * ```typescript
+ * const token = ashid4('tok_');  // "tok_x7k9m2p4q8r1s5t3v6w0y1z3" (30 chars with prefix)
+ * const secret = ashid4();       // "a3b5c7d9e1f2g4h6j8k0m2n4p6q8" (26 chars)
+ * ```
+ */
+export function ashid4(prefix?: string): string {
+  return Ashid.create4(prefix);
 }
 
 /**

@@ -173,7 +173,7 @@ describe('Ashid', () => {
     });
 
     it('should throw on wrong length without underscore', () => {
-      expect(() => Ashid.parse('u12345')).toThrow('must be 22 characters');
+      expect(() => Ashid.parse('u12345')).toThrow('must be 22 or 26 characters');
     });
 
     it('should parse dash as underscore delimiter', () => {

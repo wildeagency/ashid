@@ -340,4 +340,96 @@ class AshidTest {
         assertTrue(Ashid.isValid(id))
     }
 
+    // ==================== CREATE4 TESTS (UUID v4 equivalent) ====================
+
+    @Test
+    fun `create4 without prefix - fixed 26 char format`() {
+        val id = Ashid.create4()
+        assertEquals(26, id.length) // 13 + 13 = 26 char base
+    }
+
+    @Test
+    fun `create4 with single char prefix - fixed format`() {
+        val id = Ashid.create4("t")
+        assertEquals(27, id.length) // 1 prefix + 26 base
+        assertTrue(id.startsWith("t"))
+    }
+
+    @Test
+    fun `create4 with underscore prefix - still fixed 26 char base`() {
+        val id = Ashid.create4("tok_")
+        assertEquals(30, id.length) // 4 prefix + 26 base
+        assertTrue(id.startsWith("tok_"))
+    }
+
+    @Test
+    fun `create4 lowercases prefix`() {
+        val id = Ashid.create4("TOKEN")
+        assertTrue(id.startsWith("token"))
+    }
+
+    @Test
+    fun `create4 throws on invalid prefix`() {
+        assertThrows<IllegalArgumentException> {
+            Ashid.create4("tok1")
+        }
+    }
+
+    @Test
+    fun `create4 throws on negative random values`() {
+        assertThrows<IllegalArgumentException> {
+            Ashid.create4(random1 = -1)
+        }
+        assertThrows<IllegalArgumentException> {
+            Ashid.create4(random2 = -1)
+        }
+    }
+
+    @Test
+    fun `create4 deterministic output with known randoms`() {
+        val id1 = Ashid.create4("tok_", 1000, 2000)
+        val id2 = Ashid.create4("tok_", 1000, 2000)
+        assertEquals(id1, id2)
+    }
+
+    @Test
+    fun `create4 generates unique IDs`() {
+        val ids = mutableSetOf<String>()
+        repeat(1000) {
+            ids.add(Ashid.create4())
+        }
+        assertEquals(1000, ids.size)
+    }
+
+    @Test
+    fun `create4 is parseable as valid ashid`() {
+        val id = Ashid.create4("tok_")
+        assertTrue(Ashid.isValid(id))
+        val (prefix, _, _) = Ashid.parse(id)
+        assertEquals("tok_", prefix)
+    }
+
+    @Test
+    fun `create4 uses 0-padding for consistent length`() {
+        // With small random values that would normally be short
+        val id = Ashid.create4(random1 = 1, random2 = 1)
+        assertEquals(26, id.length)
+        assertTrue(id.startsWith("000000000000")) // Padded first component (13 chars)
+    }
+
+    @Test
+    fun `ashid4 convenience function`() {
+        val id = ashid4("tok_")
+        assertEquals(30, id.length) // 4 + 26
+        assertTrue(id.startsWith("tok_"))
+        assertTrue(Ashid.isValid(id))
+    }
+
+    @Test
+    fun `ashid4 without prefix`() {
+        val id = ashid4()
+        assertEquals(26, id.length)
+        assertTrue(Ashid.isValid(id))
+    }
+
 }
