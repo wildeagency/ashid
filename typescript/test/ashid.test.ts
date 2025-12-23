@@ -10,15 +10,20 @@ describe('Ashid', () => {
       expect(/^[0-9]/.test(id)).toBe(true);
     });
 
-    it('should create Ashid with prefix without underscore (fixed 22-char base)', () => {
-      const id = Ashid.create('u');
-      expect(id).toMatch(/^u[0-9]/);
-      expect(id.length).toBe(23); // 'u' + 22 chars
+    it('should create Ashid with prefix (auto-adds delimiter)', () => {
+      const id = Ashid.create('user');
+      expect(id).toMatch(/^user_/);
     });
 
-    it('should create Ashid with prefix with underscore (variable length)', () => {
+    it('should create Ashid with trailing underscore (ignored, re-added)', () => {
       const id = Ashid.create('user_');
       expect(id).toMatch(/^user_/);
+    });
+
+    it('should create same ID with or without trailing delimiter', () => {
+      const id1 = Ashid.create('user', 1000, 0);
+      const id2 = Ashid.create('user_', 1000, 0);
+      expect(id1).toBe(id2);
     });
 
     it('should accept empty string as no prefix', () => {
@@ -27,16 +32,24 @@ describe('Ashid', () => {
       expect(id.length).toBe(22);
     });
 
-    it('should throw on prefix with numbers', () => {
-      expect(() => Ashid.create('u1')).toThrow('only letters');
+    it('should allow alphanumeric prefix', () => {
+      const id = Ashid.create('user1', 1000, 0);
+      expect(id).toMatch(/^user1_/);
     });
 
-    it('should throw on prefix with hyphens', () => {
-      expect(() => Ashid.create('a-b')).toThrow('only letters');
+    it('should strip non-alphanumeric characters from prefix', () => {
+      const id = Ashid.create('a-b_c', 1000, 0);
+      expect(id).toMatch(/^abc_/); // strips - and _
     });
 
-    it('should throw on prefix with underscore in middle', () => {
-      expect(() => Ashid.create('a_b')).toThrow('only letters');
+    it('should strip special characters from prefix', () => {
+      const id = Ashid.create('user!@#$%', 1000, 0);
+      expect(id).toMatch(/^user_/);
+    });
+
+    it('should return no prefix if all chars stripped', () => {
+      const id = Ashid.create('___', 1000, 0);
+      expect(id.length).toBe(22); // No prefix, fixed format
     });
 
     it('should throw on negative timestamp', () => {
@@ -62,15 +75,9 @@ describe('Ashid', () => {
     });
 
     it('should lowercase uppercase prefix in create', () => {
-      const id = Ashid.create('USER_', 1000, 0);
+      const id = Ashid.create('USER', 1000, 0);
       expect(id).toMatch(/^user_/);
       expect(Ashid.prefix(id)).toBe('user_');
-    });
-
-    it('should lowercase uppercase prefix without underscore in create', () => {
-      const id = Ashid.create('U', 1000, 0);
-      expect(id).toMatch(/^u[0-9]/);
-      expect(Ashid.prefix(id)).toBe('u');
     });
   });
 
@@ -88,67 +95,51 @@ describe('Ashid', () => {
       });
     });
 
-    describe('prefix without underscore (fixed 22-char base)', () => {
-      it('timestamp 0 should produce padded base ID', () => {
-        const id = Ashid.create('u', 0, 0);
-        expect(id).toBe('u0000000000000000000000');
-        expect(id.length).toBe(23);
-      });
-
-      it('should always have 22-char base ID', () => {
-        const id = Ashid.create('user', Date.now(), 12345);
-        expect(id.length).toBe(26); // 'user' (4) + 22
-      });
-    });
-
-    describe('prefix with underscore (variable length)', () => {
+    describe('prefix (variable length with delimiter)', () => {
       it('timestamp 0, random 0 should be minimal', () => {
-        const id = Ashid.create('user_', 0, 0);
+        const id = Ashid.create('user', 0, 0);
         expect(id).toBe('user_0');
       });
 
       it('timestamp 0, random 1 should omit timestamp', () => {
-        const id = Ashid.create('user_', 0, 1);
+        const id = Ashid.create('user', 0, 1);
         expect(id).toBe('user_1');
       });
 
       it('timestamp 0, random 31 should be short', () => {
-        const id = Ashid.create('user_', 0, 31);
+        const id = Ashid.create('user', 0, 31);
         expect(id).toBe('user_z');
       });
 
       it('timestamp 1, random 0 should include timestamp', () => {
-        const id = Ashid.create('user_', 1, 0);
+        const id = Ashid.create('user', 1, 0);
         expect(id).toBe('user_10000000000000');
         expect(id.length).toBe(19); // 'user_' (5) + 1 + 13
       });
 
       it('current timestamp should have variable length', () => {
-        const id = Ashid.create('user_', Date.now(), 0);
+        const id = Ashid.create('user', Date.now(), 0);
         // 'user_' (5) + 9 (current timestamp) + 13 (padded random) = 27
         expect(id.length).toBe(27);
+      });
+
+      it('single letter prefix should also get delimiter', () => {
+        const id = Ashid.create('u', 0, 0);
+        expect(id).toBe('u_0');
       });
     });
   });
 
   describe('parse', () => {
-    it('should parse Ashid without prefix', () => {
-      const id = '1kbg1jmtt0000000000000';
+    it('should parse Ashid without prefix (22-char base)', () => {
+      const id = '0000000000000000000000';
       const [prefix, timestamp, random] = Ashid.parse(id);
       expect(prefix).toBe('');
-      expect(timestamp).toBe('1kbg1jmtt');
+      expect(timestamp).toBe('000000000');
       expect(random).toBe('0000000000000');
     });
 
-    it('should parse Ashid with prefix without underscore', () => {
-      const id = 'u1kbg1jmtt0000000000000';
-      const [prefix, timestamp, random] = Ashid.parse(id);
-      expect(prefix).toBe('u');
-      expect(timestamp).toBe('1kbg1jmtt');
-      expect(random).toBe('0000000000000');
-    });
-
-    it('should parse Ashid with prefix with underscore (variable)', () => {
+    it('should parse Ashid with delimiter prefix (variable)', () => {
       const id = 'user_1kbg1jmtt0000000000000';
       const [prefix, timestamp, random] = Ashid.parse(id);
       expect(prefix).toBe('user_');
@@ -172,8 +163,17 @@ describe('Ashid', () => {
       expect(() => Ashid.parse('user_')).toThrow('must have a base ID');
     });
 
-    it('should throw on wrong length without underscore', () => {
-      expect(() => Ashid.parse('u12345')).toThrow('must be 22 or 26 characters');
+    it('should treat non-delimited ID as no prefix', () => {
+      // Old-style ID without delimiter - entire string is base (must be exactly 22 chars)
+      const id = 'u1234567890123456789ab'; // exactly 22 chars
+      const [prefix, timestamp, random] = Ashid.parse(id);
+      expect(prefix).toBe(''); // No delimiter = no prefix
+      expect(timestamp).toBe('u12345678');
+      expect(random).toBe('90123456789ab');
+    });
+
+    it('should throw on wrong length without delimiter', () => {
+      expect(() => Ashid.parse('abc123')).toThrow('must be 22 or 26 characters');
     });
 
     it('should parse dash as underscore delimiter', () => {
@@ -196,37 +196,37 @@ describe('Ashid', () => {
       expect(Ashid.prefix(id)).toBe('');
     });
 
-    it('should extract prefix without underscore', () => {
-      const id = Ashid.create('u', 1000, 0);
-      expect(Ashid.prefix(id)).toBe('u');
+    it('should extract prefix with delimiter', () => {
+      const id = Ashid.create('user', 1000, 0);
+      expect(Ashid.prefix(id)).toBe('user_');
     });
 
-    it('should extract prefix with underscore', () => {
-      const id = Ashid.create('user_', 1000, 0);
-      expect(Ashid.prefix(id)).toBe('user_');
+    it('should extract single letter prefix with delimiter', () => {
+      const id = Ashid.create('u', 1000, 0);
+      expect(Ashid.prefix(id)).toBe('u_');
     });
   });
 
   describe('timestamp()', () => {
-    it('should extract timestamp from fixed format', () => {
+    it('should extract timestamp from fixed format (no prefix)', () => {
       const timestamp = 1609459200000;
-      const id = Ashid.create('u', timestamp, 0);
+      const id = Ashid.create(undefined, timestamp, 0);
       expect(Ashid.timestamp(id)).toBe(timestamp);
     });
 
-    it('should extract timestamp from variable format', () => {
+    it('should extract timestamp from variable format (with prefix)', () => {
       const timestamp = 1609459200000;
-      const id = Ashid.create('user_', timestamp, 0);
+      const id = Ashid.create('user', timestamp, 0);
       expect(Ashid.timestamp(id)).toBe(timestamp);
     });
 
     it('should extract timestamp 0 from fixed format', () => {
-      const id = Ashid.create('u', 0, 12345);
+      const id = Ashid.create(undefined, 0, 12345);
       expect(Ashid.timestamp(id)).toBe(0);
     });
 
     it('should extract timestamp 0 from variable format', () => {
-      const id = Ashid.create('user_', 0, 12345);
+      const id = Ashid.create('user', 0, 12345);
       expect(Ashid.timestamp(id)).toBe(0);
     });
   });
@@ -234,41 +234,37 @@ describe('Ashid', () => {
   describe('random()', () => {
     it('should extract random from fixed format', () => {
       const random = 123456789;
-      const id = Ashid.create('u', Date.now(), random);
+      const id = Ashid.create(undefined, Date.now(), random);
       expect(Ashid.random(id)).toBe(random);
     });
 
     it('should extract random from variable format', () => {
       const random = 123456789;
-      const id = Ashid.create('user_', Date.now(), random);
+      const id = Ashid.create('user', Date.now(), random);
       expect(Ashid.random(id)).toBe(random);
     });
 
     it('should extract random 0 from fixed format', () => {
-      const id = Ashid.create('u', 1000, 0);
+      const id = Ashid.create(undefined, 1000, 0);
       expect(Ashid.random(id)).toBe(0);
     });
 
     it('should extract random from variable format with timestamp 0', () => {
-      const id = Ashid.create('user_', 0, 12345);
+      const id = Ashid.create('user', 0, 12345);
       expect(Ashid.random(id)).toBe(12345);
     });
   });
 
   describe('normalize()', () => {
     it('should lowercase uppercase characters', () => {
-      // Create a valid ID then uppercase it
-      const original = Ashid.create('u', 1609459200000, 0);
+      const original = Ashid.create('user', 1609459200000, 0);
       const uppercased = original.toUpperCase();
       const normalized = Ashid.normalize(uppercased);
       expect(normalized).toBe(original);
     });
 
     it('should convert ambiguous characters via decode/encode round-trip', () => {
-      // Use underscore prefix so we can manipulate base without length issues
-      const original = Ashid.create('user_', 1609459200000, 1111);
-      // I, L map to 1; O maps to 0
-      // Replace in the base32 portion only
+      const original = Ashid.create('user', 1609459200000, 1111);
       const [prefix, ts, rand] = Ashid.parse(original);
       const modifiedTs = ts.replace(/1/g, 'I').replace(/0/g, 'O');
       const modifiedRand = rand.replace(/1/g, 'L').replace(/0/g, 'O');
@@ -280,21 +276,21 @@ describe('Ashid', () => {
     });
 
     it('should normalize variable length format', () => {
-      const original = Ashid.create('user_', 1609459200000, 12345);
+      const original = Ashid.create('user', 1609459200000, 12345);
       const uppercased = original.toUpperCase();
       const normalized = Ashid.normalize(uppercased);
       expect(normalized).toBe(original);
     });
 
     it('should preserve values through round-trip', () => {
-      const original = Ashid.create('user_', 1609459200000, 12345);
+      const original = Ashid.create('user', 1609459200000, 12345);
       const normalized = Ashid.normalize(original.toUpperCase());
       expect(Ashid.timestamp(normalized)).toBe(1609459200000);
       expect(Ashid.random(normalized)).toBe(12345);
     });
 
-    it('should normalize fixed format with uppercase', () => {
-      const original = Ashid.create('u', 1609459200000, 12345);
+    it('should normalize fixed format (no prefix) with uppercase', () => {
+      const original = Ashid.create(undefined, 1609459200000, 12345);
       const normalized = Ashid.normalize(original.toUpperCase());
       expect(normalized).toBe(original);
     });
@@ -317,13 +313,13 @@ describe('Ashid', () => {
     it('should validate correct Ashids', () => {
       expect(Ashid.isValid(Ashid.create())).toBe(true);
       expect(Ashid.isValid(Ashid.create('u'))).toBe(true);
-      expect(Ashid.isValid(Ashid.create('user_'))).toBe(true);
+      expect(Ashid.isValid(Ashid.create('user'))).toBe(true);
     });
 
     it('should validate timestamp 0 IDs', () => {
       expect(Ashid.isValid(Ashid.create(undefined, 0, 0))).toBe(true);
       expect(Ashid.isValid(Ashid.create('u', 0, 0))).toBe(true);
-      expect(Ashid.isValid(Ashid.create('user_', 0, 0))).toBe(true);
+      expect(Ashid.isValid(Ashid.create('user', 0, 0))).toBe(true);
     });
 
     it('should reject empty strings', () => {
@@ -331,30 +327,34 @@ describe('Ashid', () => {
     });
 
     it('should reject invalid base32', () => {
-      expect(Ashid.isValid('u1234567890-invalid!@#')).toBe(false);
+      expect(Ashid.isValid('user_invalid!@#')).toBe(false);
     });
 
-    it('should reject wrong length without underscore', () => {
-      expect(Ashid.isValid('u12345')).toBe(false);
+    it('should reject wrong length without delimiter', () => {
+      expect(Ashid.isValid('abc123')).toBe(false);
+    });
+
+    it('should validate 22-char base without delimiter', () => {
+      expect(Ashid.isValid('0000000000000000000000')).toBe(true);
     });
   });
 
   describe('time-sortability', () => {
-    it('should be sortable by creation time (fixed format)', () => {
+    it('should be sortable by creation time (no prefix)', () => {
       const base = Date.now();
-      const id1 = Ashid.create('u', base, 0);
-      const id2 = Ashid.create('u', base + 1000, 0);
-      const id3 = Ashid.create('u', base + 2000, 0);
+      const id1 = Ashid.create(undefined, base, 0);
+      const id2 = Ashid.create(undefined, base + 1000, 0);
+      const id3 = Ashid.create(undefined, base + 2000, 0);
 
       const sorted = [id3, id1, id2].sort();
       expect(sorted).toEqual([id1, id2, id3]);
     });
 
-    it('should be sortable by creation time (variable format)', () => {
+    it('should be sortable by creation time (with prefix)', () => {
       const base = Date.now();
-      const id1 = Ashid.create('user_', base, 0);
-      const id2 = Ashid.create('user_', base + 1000, 0);
-      const id3 = Ashid.create('user_', base + 2000, 0);
+      const id1 = Ashid.create('user', base, 0);
+      const id2 = Ashid.create('user', base + 1000, 0);
+      const id3 = Ashid.create('user', base + 2000, 0);
 
       const sorted = [id3, id1, id2].sort();
       expect(sorted).toEqual([id1, id2, id3]);
@@ -362,8 +362,8 @@ describe('Ashid', () => {
 
     it('should sort by random when timestamp is same', () => {
       const timestamp = Date.now();
-      const id1 = Ashid.create('u', timestamp, 1000);
-      const id2 = Ashid.create('u', timestamp, 2000);
+      const id1 = Ashid.create(undefined, timestamp, 1000);
+      const id2 = Ashid.create(undefined, timestamp, 2000);
 
       const sorted = [id2, id1].sort();
       expect(sorted).toEqual([id1, id2]);
@@ -376,9 +376,9 @@ describe('Ashid', () => {
       expect(Ashid.isValid(id)).toBe(true);
     });
 
-    it('ashid(prefix) should create Ashid with prefix', () => {
-      const id = ashid('u');
-      expect(id).toMatch(/^u[0-9]/);
+    it('ashid(prefix) should create Ashid with prefix and delimiter', () => {
+      const id = ashid('user');
+      expect(id).toMatch(/^user_/);
     });
 
     it('parseAshid() should return tuple', () => {
@@ -392,20 +392,20 @@ describe('Ashid', () => {
 
   describe('double-click selectability', () => {
     it('should not contain hyphens', () => {
-      const id = ashid('u');
+      const id = ashid('user');
       expect(id).not.toContain('-');
     });
 
     it('should not contain spaces', () => {
-      const id = ashid('u');
+      const id = ashid('user');
       expect(id).not.toContain(' ');
     });
 
     it('base ID should only contain alphanumeric and underscore', () => {
       const id1 = ashid();
-      const id2 = ashid('user_');
+      const id2 = ashid('user');
       expect(id1).toMatch(/^[a-z0-9]+$/);
-      expect(id2).toMatch(/^[a-z_][a-z0-9_]+$/);
+      expect(id2).toMatch(/^[a-z]+_[a-z0-9]+$/);
     });
   });
 });

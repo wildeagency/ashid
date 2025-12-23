@@ -18,66 +18,85 @@ class AshidTest {
     }
 
     @Test
-    fun `create Ashid with single char prefix without underscore - fixed format`() {
-        val id = Ashid.create("u")
-        assertEquals(23, id.length) // 1 prefix + 22 base
-        assertTrue(id.startsWith("u"))
-    }
-
-    @Test
-    fun `create Ashid with multi char prefix without underscore - fixed format`() {
+    fun `create Ashid with prefix - auto adds delimiter`() {
         val id = Ashid.create("user")
-        assertEquals(26, id.length) // 4 prefix + 22 base
-        assertTrue(id.startsWith("user"))
+        assertTrue(id.startsWith("user_"))
     }
 
     @Test
-    fun `create Ashid with underscore delimiter - variable format`() {
+    fun `create Ashid with trailing underscore - ignored and re-added`() {
         val id = Ashid.create("user_")
         assertTrue(id.startsWith("user_"))
-        // Variable length: 5 prefix + timestamp (variable) + 13 random
-        assertTrue(id.length > 5) // At least prefix + some base
     }
 
     @Test
-    fun `create Ashid with timestamp 0 and underscore - omits timestamp`() {
-        val id = Ashid.create("user_", time = 0, randomLong = 0)
+    fun `create same ID with or without trailing delimiter`() {
+        val id1 = Ashid.create("user", time = 1000, randomLong = 0)
+        val id2 = Ashid.create("user_", time = 1000, randomLong = 0)
+        assertEquals(id1, id2)
+    }
+
+    @Test
+    fun `create Ashid with trailing dash - converted to underscore`() {
+        val id = Ashid.create("user-", time = 1000, randomLong = 0)
+        assertTrue(id.startsWith("user_"))
+    }
+
+    @Test
+    fun `create Ashid with timestamp 0 and prefix - omits timestamp`() {
+        val id = Ashid.create("user", time = 0, randomLong = 0)
         assertEquals("user_0", id) // timestamp 0 omitted, random 0 = "0"
     }
 
     @Test
     fun `create Ashid with timestamp 0 and no random - just zero`() {
-        val id = Ashid.create("user_", time = 0, randomLong = 0)
+        val id = Ashid.create("user", time = 0, randomLong = 0)
         assertEquals("user_0", id)
     }
 
     @Test
     fun `create Ashid with timestamp 0 and random value - no timestamp padding`() {
-        val id = Ashid.create("user_", time = 0, randomLong = 12345)
+        val id = Ashid.create("user", time = 0, randomLong = 12345)
         // timestamp 0 omitted, random not padded when timestamp = 0
         val expected = "user_" + EncoderBase32Crockford.encode(12345)
         assertEquals(expected, id)
     }
 
     @Test
-    fun `create Ashid without underscore and timestamp 0 - fixed 22 chars`() {
+    fun `create Ashid without prefix and timestamp 0 - fixed 22 chars`() {
+        val id = Ashid.create(time = 0, randomLong = 0)
+        assertEquals(22, id.length)
+        assertEquals("0000000000000000000000", id)
+    }
+
+    @Test
+    fun `single letter prefix should also get delimiter`() {
         val id = Ashid.create("u", time = 0, randomLong = 0)
-        assertEquals(23, id.length) // 1 prefix + 22 base
-        assertEquals("u0000000000000000000000", id)
+        assertEquals("u_0", id)
     }
 
     @Test
-    fun `throw on prefix with numbers`() {
-        assertThrows<IllegalArgumentException> {
-            Ashid.create("u1")
-        }
+    fun `allow alphanumeric prefix`() {
+        val id = Ashid.create("user1", time = 1000, randomLong = 0)
+        assertTrue(id.startsWith("user1_"))
     }
 
     @Test
-    fun `throw on prefix with underscore in middle`() {
-        assertThrows<IllegalArgumentException> {
-            Ashid.create("a_b")
-        }
+    fun `strip non-alphanumeric characters from prefix`() {
+        val id = Ashid.create("a-b_c", time = 1000, randomLong = 0)
+        assertTrue(id.startsWith("abc_")) // strips - and _
+    }
+
+    @Test
+    fun `strip special characters from prefix`() {
+        val id = Ashid.create("user!@#\$%", time = 1000, randomLong = 0)
+        assertTrue(id.startsWith("user_"))
+    }
+
+    @Test
+    fun `return no prefix if all chars stripped`() {
+        val id = Ashid.create("___", time = 1000, randomLong = 0)
+        assertEquals(22, id.length) // No prefix, fixed format
     }
 
     @Test
@@ -116,27 +135,32 @@ class AshidTest {
         assertEquals(1000, ids.size)
     }
 
+    @Test
+    fun `lowercase uppercase prefix in create`() {
+        val id = Ashid.create("USER", time = 1000, randomLong = 0)
+        assertTrue(id.startsWith("user_"))
+        assertEquals("user_", Ashid.prefix(id))
+    }
+
     // ==================== SORTABILITY TESTS ====================
 
     @Test
-    fun `be sortable by creation time - fixed format`() {
-        // Use timestamps with same encoding length for proper sorting
-        val baseTime = 1000000000000L // Same length when encoded
-        val id1 = Ashid.create("u", time = baseTime)
-        val id2 = Ashid.create("u", time = baseTime + 1000)
-        val id3 = Ashid.create("u", time = baseTime + 2000)
+    fun `be sortable by creation time - no prefix`() {
+        val baseTime = 1000000000000L
+        val id1 = Ashid.create(time = baseTime)
+        val id2 = Ashid.create(time = baseTime + 1000)
+        val id3 = Ashid.create(time = baseTime + 2000)
 
         val sorted = listOf(id3, id1, id2).sorted()
         assertEquals(listOf(id1, id2, id3), sorted)
     }
 
     @Test
-    fun `be sortable by creation time - variable format with underscore`() {
-        // Use timestamps with same encoding length
+    fun `be sortable by creation time - with prefix`() {
         val baseTime = 1000000000000L
-        val id1 = Ashid.create("user_", time = baseTime)
-        val id2 = Ashid.create("user_", time = baseTime + 1000)
-        val id3 = Ashid.create("user_", time = baseTime + 2000)
+        val id1 = Ashid.create("user", time = baseTime)
+        val id2 = Ashid.create("user", time = baseTime + 1000)
+        val id3 = Ashid.create("user", time = baseTime + 2000)
 
         val sorted = listOf(id3, id1, id2).sorted()
         assertEquals(listOf(id1, id2, id3), sorted)
@@ -145,8 +169,8 @@ class AshidTest {
     @Test
     fun `sort chronologically with same timestamp but different random`() {
         val timestamp = System.currentTimeMillis()
-        val id1 = Ashid.create("u", time = timestamp, randomLong = 1000)
-        val id2 = Ashid.create("u", time = timestamp, randomLong = 2000)
+        val id1 = Ashid.create(time = timestamp, randomLong = 1000)
+        val id2 = Ashid.create(time = timestamp, randomLong = 2000)
 
         val sorted = listOf(id2, id1).sorted()
         assertEquals(listOf(id1, id2), sorted)
@@ -164,17 +188,8 @@ class AshidTest {
     }
 
     @Test
-    fun `parse Ashid with single char prefix - fixed format`() {
-        val id = Ashid.create("u", time = 1000, randomLong = 2000)
-        val (prefix, encodedTimestamp, encodedRandom) = Ashid.parse(id)
-        assertEquals("u", prefix)
-        assertEquals(1000L, EncoderBase32Crockford.decode(encodedTimestamp))
-        assertEquals(2000L, EncoderBase32Crockford.decode(encodedRandom))
-    }
-
-    @Test
-    fun `parse Ashid with underscore prefix - variable format`() {
-        val id = Ashid.create("user_", time = 1000, randomLong = 2000)
+    fun `parse Ashid with delimiter prefix - variable format`() {
+        val id = Ashid.create("user", time = 1000, randomLong = 2000)
         val (prefix, encodedTimestamp, encodedRandom) = Ashid.parse(id)
         assertEquals("user_", prefix)
         assertEquals(1000L, EncoderBase32Crockford.decode(encodedTimestamp))
@@ -183,11 +198,21 @@ class AshidTest {
 
     @Test
     fun `parse Ashid with underscore prefix and timestamp 0`() {
-        val id = Ashid.create("user_", time = 0, randomLong = 12345)
+        val id = Ashid.create("user", time = 0, randomLong = 12345)
         val (prefix, encodedTimestamp, encodedRandom) = Ashid.parse(id)
         assertEquals("user_", prefix)
         assertEquals("0", encodedTimestamp) // timestamp 0 returns "0"
         assertEquals(12345L, EncoderBase32Crockford.decode(encodedRandom))
+    }
+
+    @Test
+    fun `treat non-delimited ID as no prefix`() {
+        // Old-style ID without delimiter - entire string is base (must be exactly 22 chars)
+        val id = "u1234567890123456789ab" // exactly 22 chars
+        val (prefix, encodedTimestamp, encodedRandom) = Ashid.parse(id)
+        assertEquals("", prefix) // No delimiter = no prefix
+        assertEquals("u12345678", encodedTimestamp)
+        assertEquals("90123456789ab", encodedRandom)
     }
 
     @Test
@@ -198,10 +223,19 @@ class AshidTest {
     }
 
     @Test
-    fun `throw on invalid fixed format length`() {
+    fun `throw on wrong length without delimiter`() {
         assertThrows<IllegalArgumentException> {
-            Ashid.parse("ushort") // prefix without underscore, base not 22 chars
+            Ashid.parse("abc123") // Not 22 or 26 chars, no delimiter
         }
+    }
+
+    @Test
+    fun `parse dash as underscore delimiter`() {
+        val id = "user-1kbg1jmtt0000000000000"
+        val (prefix, encodedTimestamp, encodedRandom) = Ashid.parse(id)
+        assertEquals("user_", prefix) // dash normalized to underscore
+        assertEquals("1kbg1jmtt", encodedTimestamp)
+        assertEquals("0000000000000", encodedRandom)
     }
 
     // ==================== EXTRACTION TESTS ====================
@@ -209,8 +243,8 @@ class AshidTest {
     @Test
     fun `prefix extraction`() {
         assertEquals("", Ashid.prefix(Ashid.create(time = 1000)))
-        assertEquals("u", Ashid.prefix(Ashid.create("u", time = 1000)))
-        assertEquals("user_", Ashid.prefix(Ashid.create("user_", time = 1000)))
+        assertEquals("u_", Ashid.prefix(Ashid.create("u", time = 1000)))
+        assertEquals("user_", Ashid.prefix(Ashid.create("user", time = 1000)))
     }
 
     @Test
@@ -218,14 +252,14 @@ class AshidTest {
         val timestamp = 1234567890L
         assertEquals(timestamp, Ashid.timestamp(Ashid.create(time = timestamp)))
         assertEquals(timestamp, Ashid.timestamp(Ashid.create("u", time = timestamp)))
-        assertEquals(timestamp, Ashid.timestamp(Ashid.create("user_", time = timestamp)))
+        assertEquals(timestamp, Ashid.timestamp(Ashid.create("user", time = timestamp)))
     }
 
     @Test
     fun `timestamp extraction with timestamp 0`() {
         assertEquals(0L, Ashid.timestamp(Ashid.create(time = 0)))
         assertEquals(0L, Ashid.timestamp(Ashid.create("u", time = 0)))
-        assertEquals(0L, Ashid.timestamp(Ashid.create("user_", time = 0)))
+        assertEquals(0L, Ashid.timestamp(Ashid.create("user", time = 0)))
     }
 
     @Test
@@ -233,22 +267,21 @@ class AshidTest {
         val random = 9876543210L
         assertEquals(random, Ashid.random(Ashid.create(randomLong = random)))
         assertEquals(random, Ashid.random(Ashid.create("u", randomLong = random)))
-        assertEquals(random, Ashid.random(Ashid.create("user_", randomLong = random)))
+        assertEquals(random, Ashid.random(Ashid.create("user", randomLong = random)))
     }
 
     // ==================== NORMALIZE TESTS ====================
 
     @Test
     fun `normalize lowercases prefix`() {
-        val id = Ashid.create("USER_", time = 1000, randomLong = 2000)
+        val id = Ashid.create("USER", time = 1000, randomLong = 2000)
         val normalized = Ashid.normalize(id.uppercase())
         assertTrue(normalized.startsWith("user_"))
     }
 
     @Test
     fun `normalize converts ambiguous characters`() {
-        // Create a valid ID first, then manually modify with ambiguous chars
-        val original = Ashid.create("user_", time = 1000, randomLong = 2000)
+        val original = Ashid.create("user", time = 1000, randomLong = 2000)
         val (prefix, encodedTimestamp, encodedRandom) = Ashid.parse(original)
 
         // Replace some chars with ambiguous equivalents
@@ -268,7 +301,7 @@ class AshidTest {
     fun `normalize preserves timestamp and random values`() {
         val timestamp = 1234567890L
         val random = 9876543210L
-        val id = Ashid.create("User_", time = timestamp, randomLong = random)
+        val id = Ashid.create("User", time = timestamp, randomLong = random)
         val normalized = Ashid.normalize(id)
 
         assertEquals("user_", Ashid.prefix(normalized))
@@ -277,27 +310,34 @@ class AshidTest {
     }
 
     @Test
-    fun `normalize fixed format ID`() {
-        val id = Ashid.create("U", time = 1000, randomLong = 2000)
+    fun `normalize fixed format ID - no prefix`() {
+        val id = Ashid.create(time = 1000, randomLong = 2000)
         val normalized = Ashid.normalize(id.uppercase())
-        assertEquals("u", Ashid.prefix(normalized))
-        assertEquals(23, normalized.length) // Fixed format preserved
+        assertEquals("", Ashid.prefix(normalized))
+        assertEquals(22, normalized.length) // Fixed format preserved
+    }
+
+    @Test
+    fun `normalize converts dash to underscore in prefix`() {
+        val withDash = "user-1kbg1jmtt0000000000000"
+        val normalized = Ashid.normalize(withDash)
+        assertTrue(normalized.startsWith("user_"))
+        assertEquals("user_", Ashid.prefix(normalized))
     }
 
     // ==================== VALIDATION TESTS ====================
 
     @Test
-    fun `validate correct Ashids - fixed format`() {
+    fun `validate correct Ashids - no prefix`() {
         assertTrue(Ashid.isValid(Ashid.create()))
-        assertTrue(Ashid.isValid(Ashid.create("u")))
-        assertTrue(Ashid.isValid(Ashid.create("user")))
+        assertTrue(Ashid.isValid(Ashid.create(time = 0, randomLong = 0)))
     }
 
     @Test
-    fun `validate correct Ashids - variable format`() {
-        assertTrue(Ashid.isValid(Ashid.create("user_")))
-        assertTrue(Ashid.isValid(Ashid.create("user_", time = 0)))
-        assertTrue(Ashid.isValid(Ashid.create("user_", time = 0, randomLong = 0)))
+    fun `validate correct Ashids - with prefix`() {
+        assertTrue(Ashid.isValid(Ashid.create("u")))
+        assertTrue(Ashid.isValid(Ashid.create("user")))
+        assertTrue(Ashid.isValid(Ashid.create("user", time = 0, randomLong = 0)))
     }
 
     @Test
@@ -306,15 +346,20 @@ class AshidTest {
     }
 
     @Test
-    fun `reject invalid fixed format length`() {
-        assertFalse(Ashid.isValid("ushort"))
-        assertFalse(Ashid.isValid("u12345")) // Too short for fixed format
+    fun `reject wrong length without delimiter`() {
+        assertFalse(Ashid.isValid("abc123"))
+        assertFalse(Ashid.isValid("u12345")) // Too short, no delimiter
     }
 
     @Test
     fun `validate variable format with short base`() {
         // user_ with just "0" is valid (timestamp 0, random 0)
         assertTrue(Ashid.isValid("user_0"))
+    }
+
+    @Test
+    fun `validate 22-char base without delimiter`() {
+        assertTrue(Ashid.isValid("0000000000000000000000"))
     }
 
     // ==================== CONVENIENCE FUNCTION TESTS ====================
@@ -326,17 +371,16 @@ class AshidTest {
     }
 
     @Test
-    fun `convenience function ashid - with prefix no underscore`() {
-        val id = ashid("u")
-        assertEquals(23, id.length)
-        assertTrue(id.startsWith("u"))
+    fun `convenience function ashid - with prefix`() {
+        val id = ashid("user")
+        assertTrue(id.startsWith("user_"))
+        assertTrue(Ashid.isValid(id))
     }
 
     @Test
     fun `convenience function ashid - with underscore prefix`() {
         val id = ashid("user_")
         assertTrue(id.startsWith("user_"))
-        // Variable length, just verify it's valid
         assertTrue(Ashid.isValid(id))
     }
 
@@ -349,14 +393,14 @@ class AshidTest {
     }
 
     @Test
-    fun `create4 with single char prefix - fixed format`() {
-        val id = Ashid.create4("t")
-        assertEquals(27, id.length) // 1 prefix + 26 base
-        assertTrue(id.startsWith("t"))
+    fun `create4 with prefix - auto adds delimiter`() {
+        val id = Ashid.create4("tok")
+        assertTrue(id.startsWith("tok_"))
+        assertEquals(30, id.length) // 4 prefix (tok_) + 26 base
     }
 
     @Test
-    fun `create4 with underscore prefix - still fixed 26 char base`() {
+    fun `create4 with trailing underscore - ignored and re-added`() {
         val id = Ashid.create4("tok_")
         assertEquals(30, id.length) // 4 prefix + 26 base
         assertTrue(id.startsWith("tok_"))
@@ -365,14 +409,19 @@ class AshidTest {
     @Test
     fun `create4 lowercases prefix`() {
         val id = Ashid.create4("TOKEN")
-        assertTrue(id.startsWith("token"))
+        assertTrue(id.startsWith("token_"))
     }
 
     @Test
-    fun `create4 throws on invalid prefix`() {
-        assertThrows<IllegalArgumentException> {
-            Ashid.create4("tok1")
-        }
+    fun `create4 allows alphanumeric prefix`() {
+        val id = Ashid.create4("tok1")
+        assertTrue(id.startsWith("tok1_"))
+    }
+
+    @Test
+    fun `create4 strips special characters from prefix`() {
+        val id = Ashid.create4("tok!@#")
+        assertTrue(id.startsWith("tok_"))
     }
 
     @Test
@@ -387,8 +436,8 @@ class AshidTest {
 
     @Test
     fun `create4 deterministic output with known randoms`() {
-        val id1 = Ashid.create4("tok_", 1000, 2000)
-        val id2 = Ashid.create4("tok_", 1000, 2000)
+        val id1 = Ashid.create4("tok", 1000, 2000)
+        val id2 = Ashid.create4("tok", 1000, 2000)
         assertEquals(id1, id2)
     }
 
@@ -403,7 +452,7 @@ class AshidTest {
 
     @Test
     fun `create4 is parseable as valid ashid`() {
-        val id = Ashid.create4("tok_")
+        val id = Ashid.create4("tok")
         assertTrue(Ashid.isValid(id))
         val (prefix, _, _) = Ashid.parse(id)
         assertEquals("tok_", prefix)
@@ -419,8 +468,8 @@ class AshidTest {
 
     @Test
     fun `ashid4 convenience function`() {
-        val id = ashid4("tok_")
-        assertEquals(30, id.length) // 4 + 26
+        val id = ashid4("tok")
+        assertEquals(30, id.length) // 4 (tok_) + 26
         assertTrue(id.startsWith("tok_"))
         assertTrue(Ashid.isValid(id))
     }

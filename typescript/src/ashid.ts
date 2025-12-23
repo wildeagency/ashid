@@ -6,27 +6,32 @@ import { EncoderBase32Crockford } from './encoder';
  */
 const MAX_TIMESTAMP = 35184372088831;
 
+/** Length of the random component when encoded (padded) */
+const RANDOM_ENCODED_LENGTH = 13;
+/** Length of the timestamp component when encoded (padded) */
+const TIMESTAMP_ENCODED_LENGTH = 9;
+/** Standard base ID length (timestamp + random) */
+const STANDARD_BASE_LENGTH = 22;
+/** Ashid4 base ID length (random1 + random2) */
+const ASHID4_BASE_LENGTH = 26;
+
 /**
  * Ashid - A time-sortable unique identifier with optional type prefix
  *
- * Format: [prefix][timestamp][random]
+ * Format: [prefix_][timestamp][random]
  *
  * Prefix Rules:
- * - With underscore delimiter (e.g., "user_"): variable length base ID allowed
- *   - Timestamp: no padding (variable length)
- *   - Random: padded to 13 chars when timestamp > 0, no padding when timestamp = 0
- * - Without underscore (e.g., "u"): fixed 22-char base ID required for parsing
- *   - Timestamp: padded to 9 chars
- *   - Random: padded to 13 chars
- * - No prefix: same as without underscore (fixed 22-char base ID)
- *
- * This allows reliable parsing of all components in both cases.
+ * - Prefix must be alphabetic only (a-z, A-Z)
+ * - Delimiter (_) is automatically added - users should NOT include it
+ * - If delimiter is passed in, it is ignored (backward compatibility)
+ * - With prefix: variable length base ID (no timestamp padding when 0)
+ * - Without prefix: fixed 22-char base ID
  *
  * Examples:
- * - "user_1kbg1jmtt4v3x8k9p2m1n" (prefix with _, current time, secure random)
- * - "u1kbg1jmtt4v3x8k9p2m1n0" (prefix without _, fixed 22-char base)
- * - "1kbg1jmtt4v3x8k9p2m1n00" (no prefix, fixed 22-char base)
- * - "user_0" (prefix with _, timestamp 0, random 0 - explicitly passed)
+ * - ashid('user') -> "user_1kbg1jmtt4v3x8k9p2m1n" (delimiter auto-added)
+ * - ashid('user_') -> "user_1kbg1jmtt4v3x8k9p2m1n" (same result, delimiter ignored)
+ * - ashid() -> "0000000001kbg1jmtt4v3x8k9" (no prefix, fixed 22-char base)
+ * - "user_0" (prefix with timestamp 0, random 0 - explicitly passed)
  *
  * Timestamp Support:
  * - Minimum: 0 (Unix epoch, Jan 1, 1970)
@@ -34,9 +39,23 @@ const MAX_TIMESTAMP = 35184372088831;
  */
 export class Ashid {
   /**
+   * Normalize a prefix.
+   * - Removes all non-alphanumeric characters
+   * - Lowercases result
+   * - Adds underscore delimiter
+   *
+   * @param prefix Raw prefix input
+   * @returns Normalized prefix with delimiter, or undefined if empty after cleaning
+   */
+  private static normalizePrefix(prefix?: string): string | undefined {
+    if (prefix === undefined || prefix === '') return undefined;
+    const cleaned = prefix.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    return cleaned === '' ? undefined : cleaned + '_';
+  }
+  /**
    * Create a new Ashid with optional type prefix
    *
-   * @param prefix Optional alphabetic prefix (may include trailing underscore as delimiter)
+   * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
    * @param time Timestamp in milliseconds (defaults to current time, min 0, max Dec 12 3084)
    * @param randomLong Random number for uniqueness (defaults to secure random)
    * @returns Ashid string
@@ -48,14 +67,7 @@ export class Ashid {
     time: number = Date.now(),
     randomLong: number = EncoderBase32Crockford.secureRandomLong()
   ): string {
-    // Validate and normalize prefix: must be alphabetic with optional trailing underscore
-    // Prefix is lowercased for case-insensitive storage
-    if (prefix !== undefined && prefix !== '') {
-      if (!/^[a-zA-Z]+_?$/.test(prefix)) {
-        throw new Error('Ashid prefix must contain only letters with optional trailing underscore');
-      }
-      prefix = prefix.toLowerCase();
-    }
+    const normalizedPrefix = this.normalizePrefix(prefix);
 
     // Validate timestamp
     const flooredTime = Math.floor(time);
@@ -72,28 +84,25 @@ export class Ashid {
       throw new Error('Ashid random value must be non-negative');
     }
 
-    // Determine if prefix has underscore delimiter
-    const hasDelimiter = prefix?.endsWith('_') ?? false;
-
     let baseId: string;
 
-    if (hasDelimiter) {
-      // Variable length: no padding on timestamp, pad random only when timestamp > 0
+    if (normalizedPrefix) {
+      // With prefix: variable length (no padding on timestamp when 0)
       const randomEncoded = flooredTime > 0
-        ? EncoderBase32Crockford.encode(flooredRandom, true) // padded to 13
-        : EncoderBase32Crockford.encode(flooredRandom); // no padding
+        ? EncoderBase32Crockford.encode(flooredRandom, true)
+        : EncoderBase32Crockford.encode(flooredRandom);
 
       baseId = flooredTime > 0
         ? EncoderBase32Crockford.encode(flooredTime) + randomEncoded
-        : randomEncoded; // timestamp 0 is omitted
+        : randomEncoded;
     } else {
-      // Fixed length: pad timestamp to 9, random to 13 = 22 chars total
-      const timeEncoded = EncoderBase32Crockford.encode(flooredTime).padStart(9, '0');
-      const randomEncoded = EncoderBase32Crockford.encode(flooredRandom, true); // padded to 13
+      // No prefix: fixed length (pad timestamp to 9, random to 13 = 22 chars)
+      const timeEncoded = EncoderBase32Crockford.encode(flooredTime).padStart(TIMESTAMP_ENCODED_LENGTH, '0');
+      const randomEncoded = EncoderBase32Crockford.encode(flooredRandom, true);
       baseId = timeEncoded + randomEncoded;
     }
 
-    return (prefix || '') + baseId;
+    return (normalizedPrefix || '') + baseId;
   }
 
   /**
@@ -101,7 +110,7 @@ export class Ashid {
    *
    * @param id The full Ashid string
    * @returns Tuple of [prefix, encodedTimestamp, encodedRandom]
-   *          - prefix: string (empty if none)
+   *          - prefix: string with trailing _ (empty if none)
    *          - encodedTimestamp: string (base32 encoded)
    *          - encodedRandom: string (base32 encoded)
    */
@@ -110,90 +119,56 @@ export class Ashid {
       throw new Error('Invalid Ashid: cannot be empty');
     }
 
-    // Find the prefix: leading alphabetic characters with optional trailing underscore or dash
-    // Dashes are normalized to underscores
+    // Find delimiter (underscore or dash) - no delimiter means no prefix
     let prefixLength = 0;
     let hasDelimiter = false;
 
-    // First pass: find if there's a delimiter
     for (let i = 0; i < id.length; i++) {
       if (/^[a-zA-Z]$/.test(id[i])) {
         prefixLength++;
       } else if ((id[i] === '_' || id[i] === '-') && prefixLength > 0) {
-        prefixLength++;
+        prefixLength++; // Include delimiter
         hasDelimiter = true;
         break;
       } else {
+        // No delimiter found - entire string is base ID (no prefix)
+        prefixLength = 0;
         break;
-      }
-    }
-
-    // If no delimiter found, determine prefix based on base length
-    // Base can be 22 chars (standard) or 26 chars (ashid4 format)
-    if (!hasDelimiter && id.length > 26) {
-      prefixLength = id.length - 26;
-      // Check if this could be a 26-char base (ashid4)
-      let valid26 = true;
-      for (let i = 0; i < prefixLength; i++) {
-        if (!/^[a-zA-Z]$/.test(id[i])) {
-          valid26 = false;
-          break;
-        }
-      }
-      if (!valid26) {
-        // Try 22-char base instead
-        prefixLength = id.length - 22;
-        for (let i = 0; i < prefixLength; i++) {
-          if (!/^[a-zA-Z]$/.test(id[i])) {
-            prefixLength = 0; // No valid prefix
-            break;
-          }
-        }
-      }
-    } else if (!hasDelimiter && id.length > 22 && id.length !== 26) {
-      prefixLength = id.length - 22;
-      // Validate that the prefix is all letters
-      for (let i = 0; i < prefixLength; i++) {
-        if (!/^[a-zA-Z]$/.test(id[i])) {
-          prefixLength = 0; // No valid prefix
-          break;
-        }
       }
     }
 
     // Normalize dash to underscore in prefix
-    const prefix = id.substring(0, prefixLength).replace(/-$/, '_');
+    const prefix = hasDelimiter ? id.substring(0, prefixLength).replace(/-$/, '_') : '';
     const baseId = id.substring(prefixLength);
 
     if (baseId.length === 0) {
-      throw new Error('Invalid Ashid: must have a base ID after prefix');
+      throw new Error('Invalid Ashid: must have a base ID');
     }
 
     let encodedTimestamp: string;
     let encodedRandom: string;
 
     if (hasDelimiter) {
-      // Variable length format
-      if (baseId.length <= 13) {
+      // Variable length format (has prefix with delimiter)
+      if (baseId.length <= RANDOM_ENCODED_LENGTH) {
         // Timestamp was 0 (omitted), entire baseId is random
         encodedTimestamp = '0';
         encodedRandom = baseId;
       } else {
         // Timestamp present, random is last 13 chars
-        encodedTimestamp = baseId.slice(0, -13);
-        encodedRandom = baseId.slice(-13);
+        encodedTimestamp = baseId.slice(0, -RANDOM_ENCODED_LENGTH);
+        encodedRandom = baseId.slice(-RANDOM_ENCODED_LENGTH);
       }
-    } else if (baseId.length === 26) {
-      // Fixed 26-char format (ashid4 - two random components)
-      encodedTimestamp = baseId.slice(0, 13);
-      encodedRandom = baseId.slice(13);
+    } else if (baseId.length === ASHID4_BASE_LENGTH) {
+      // Fixed 26-char format (ashid4 - two random components, no prefix)
+      encodedTimestamp = baseId.slice(0, RANDOM_ENCODED_LENGTH);
+      encodedRandom = baseId.slice(RANDOM_ENCODED_LENGTH);
+    } else if (baseId.length === STANDARD_BASE_LENGTH) {
+      // Fixed 22-char format (standard ashid, no prefix)
+      encodedTimestamp = baseId.slice(0, TIMESTAMP_ENCODED_LENGTH);
+      encodedRandom = baseId.slice(TIMESTAMP_ENCODED_LENGTH);
     } else {
-      // Fixed 22-char format (standard ashid)
-      if (baseId.length !== 22) {
-        throw new Error(`Invalid Ashid: base ID must be 22 or 26 characters without underscore delimiter (got ${baseId.length})`);
-      }
-      encodedTimestamp = baseId.slice(0, 9);
-      encodedRandom = baseId.slice(9);
+      throw new Error(`Invalid Ashid: base ID must be ${STANDARD_BASE_LENGTH} or ${ASHID4_BASE_LENGTH} characters without delimiter (got ${baseId.length})`);
     }
 
     return [prefix, encodedTimestamp, encodedRandom];
@@ -245,8 +220,8 @@ export class Ashid {
     try {
       const [prefix, encodedTimestamp, encodedRandom] = this.parse(id);
 
-      // Validate prefix format
-      if (prefix && !/^[a-zA-Z]+_?$/.test(prefix)) {
+      // Validate prefix format (must be alphanumeric ending with _)
+      if (prefix && !/^[a-zA-Z0-9]+_$/.test(prefix)) {
         return false;
       }
 
@@ -283,7 +258,7 @@ export class Ashid {
    * create4() uses two random values with consistent padding for maximum entropy.
    * Both components are padded to 13 chars each = 26 char base (~106 bits of entropy).
    *
-   * @param prefix Optional alphabetic prefix (may include trailing underscore as delimiter)
+   * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
    * @param random1 First random number (defaults to secure random)
    * @param random2 Second random number (defaults to secure random)
    * @returns Ashid string with two random components, consistently padded
@@ -293,13 +268,7 @@ export class Ashid {
     random1: number = EncoderBase32Crockford.secureRandomLong(),
     random2: number = EncoderBase32Crockford.secureRandomLong()
   ): string {
-    // Validate and normalize prefix
-    if (prefix !== undefined && prefix !== '') {
-      if (!/^[a-zA-Z]+_?$/.test(prefix)) {
-        throw new Error('Ashid prefix must contain only letters with optional trailing underscore');
-      }
-      prefix = prefix.toLowerCase();
-    }
+    const normalizedPrefix = this.normalizePrefix(prefix);
 
     // Validate random values
     const flooredRandom1 = Math.floor(random1);
@@ -309,11 +278,11 @@ export class Ashid {
     }
 
     // Both components padded to 13 chars for maximum entropy (26 char base)
-    const encoded1 = EncoderBase32Crockford.encode(flooredRandom1, true); // padded to 13
-    const encoded2 = EncoderBase32Crockford.encode(flooredRandom2, true); // padded to 13
+    const encoded1 = EncoderBase32Crockford.encode(flooredRandom1, true);
+    const encoded2 = EncoderBase32Crockford.encode(flooredRandom2, true);
     const baseId = encoded1 + encoded2;
 
-    return (prefix || '') + baseId;
+    return (normalizedPrefix || '') + baseId;
   }
 
 }
@@ -321,7 +290,7 @@ export class Ashid {
 /**
  * Create a new Ashid with optional type prefix
  *
- * @param prefix Optional entity type prefix (letters with optional trailing underscore)
+ * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
  * @returns Ashid string
  */
 export function ashid(prefix?: string): string {
@@ -336,12 +305,12 @@ export function ashid(prefix?: string): string {
  * Always produces consistently 0-padded output (26 char base = 13 + 13, ~106 bits entropy).
  * Useful for tokens, secrets, or any ID where unpredictability is more important than ordering.
  *
- * @param prefix Optional entity type prefix (letters with optional trailing underscore)
+ * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
  * @returns Ashid string with two random components, consistently padded
  *
  * @example
  * ```typescript
- * const token = ashid4('tok_');  // "tok_x7k9m2p4q8r1s5t3v6w0y1z3" (30 chars with prefix)
+ * const token = ashid4('tok');   // "tok_x7k9m2p4q8r1s5t3v6w0y1z3" (30 chars with prefix)
  * const secret = ashid4();       // "a3b5c7d9e1f2g4h6j8k0m2n4p6q8" (26 chars)
  * ```
  */

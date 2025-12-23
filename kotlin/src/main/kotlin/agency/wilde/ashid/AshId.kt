@@ -6,21 +6,31 @@ package agency.wilde.ashid
  */
 private const val MAX_TIMESTAMP = 35184372088831L
 
+/** Length of the random component when encoded (padded) */
+private const val RANDOM_ENCODED_LENGTH = 13
+/** Length of the timestamp component when encoded (padded) */
+private const val TIMESTAMP_ENCODED_LENGTH = 9
+/** Standard base ID length (timestamp + random) */
+private const val STANDARD_BASE_LENGTH = 22
+/** Ashid4 base ID length (random1 + random2) */
+private const val ASHID4_BASE_LENGTH = 26
+
 /**
  * Ashid - A time-sortable unique identifier with optional type prefix
  *
- * Format: [prefix][timestamp][random]
+ * Format: [prefix_][timestamp][random]
  *
  * Prefix Rules:
- * - With underscore delimiter (e.g., "user_"): variable length base ID allowed
- *   - Timestamp: no padding (variable length)
- *   - Random: padded to 13 chars when timestamp > 0, no padding when timestamp = 0
- * - Without underscore (e.g., "u"): fixed 22-char base ID required for parsing
- *   - Timestamp: padded to 9 chars
- *   - Random: padded to 13 chars
- * - No prefix: same as without underscore (fixed 22-char base ID)
+ * - Prefix must be alphabetic only (a-z, A-Z)
+ * - Delimiter (_) is automatically added - users should NOT include it
+ * - If delimiter is passed in, it is ignored (backward compatibility)
+ * - With prefix: variable length base ID (no timestamp padding when 0)
+ * - Without prefix: fixed 22-char base ID
  *
- * This allows reliable parsing of all components in both cases.
+ * Examples:
+ * - ashid("user") -> "user_1kbg1jmtt4v3x8k9p2m1n" (delimiter auto-added)
+ * - ashid("user_") -> "user_1kbg1jmtt4v3x8k9p2m1n" (same result, delimiter ignored)
+ * - ashid() -> "0000000001kbg1jmtt4v3x8k9" (no prefix, fixed 22-char base)
  *
  * Timestamp Support:
  * - Minimum: 0 (Unix epoch, Jan 1, 1970)
@@ -28,9 +38,23 @@ private const val MAX_TIMESTAMP = 35184372088831L
  */
 object Ashid {
     /**
+     * Normalize a prefix.
+     * - Removes all non-alphanumeric characters
+     * - Lowercases result
+     * - Adds underscore delimiter
+     *
+     * @param prefix Raw prefix input
+     * @return Normalized prefix with delimiter, or null if empty after cleaning
+     */
+    private fun normalizePrefix(prefix: String?): String? {
+        if (prefix.isNullOrEmpty()) return null
+        val cleaned = prefix.replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
+        return if (cleaned.isEmpty()) null else cleaned + "_"
+    }
+    /**
      * Create a new Ashid with optional type prefix
      *
-     * @param prefix Optional alphabetic prefix (may include trailing underscore as delimiter)
+     * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
      * @param time Timestamp in milliseconds (defaults to current time, min 0, max Dec 12 3084)
      * @param randomLong Random number for uniqueness (defaults to secure random)
      * @return Ashid string
@@ -44,17 +68,7 @@ object Ashid {
         time: Long = System.currentTimeMillis(),
         randomLong: Long = EncoderBase32Crockford.secureRandomLong()
     ): String {
-        // Validate and normalize prefix: must be alphabetic with optional trailing underscore/dash
-        val normalizedPrefix = if (!prefix.isNullOrEmpty()) {
-            // Convert dash to underscore for consistency with TypeScript
-            val withUnderscore = prefix.replace(Regex("-$"), "_")
-            require(withUnderscore.matches(Regex("^[a-zA-Z]+_?$"))) {
-                "Ashid prefix must contain only letters with optional trailing underscore or dash"
-            }
-            withUnderscore.lowercase()
-        } else {
-            null
-        }
+        val normalizedPrefix = normalizePrefix(prefix)
 
         // Validate timestamp
         require(time >= 0) { "Ashid timestamp must be non-negative" }
@@ -63,26 +77,23 @@ object Ashid {
         // Validate random value
         require(randomLong >= 0) { "Ashid random value must be non-negative" }
 
-        // Determine if prefix has underscore delimiter
-        val hasDelimiter = normalizedPrefix?.endsWith('_') == true
-
-        val baseId = if (hasDelimiter) {
-            // Variable length: no padding on timestamp, pad random only when timestamp > 0
+        val baseId = if (normalizedPrefix != null) {
+            // With prefix: variable length (no padding on timestamp when 0)
             val randomEncoded = if (time > 0) {
-                EncoderBase32Crockford.encode(randomLong, padded = true) // padded to 13
+                EncoderBase32Crockford.encode(randomLong, padded = true)
             } else {
-                EncoderBase32Crockford.encode(randomLong) // no padding
+                EncoderBase32Crockford.encode(randomLong)
             }
 
             if (time > 0) {
                 EncoderBase32Crockford.encode(time) + randomEncoded
             } else {
-                randomEncoded // timestamp 0 is omitted
+                randomEncoded
             }
         } else {
-            // Fixed length: pad timestamp to 9, random to 13 = 22 chars total
-            val timeEncoded = EncoderBase32Crockford.encode(time).padStart(9, '0')
-            val randomEncoded = EncoderBase32Crockford.encode(randomLong, padded = true) // padded to 13
+            // No prefix: fixed length (pad timestamp to 9, random to 13 = 22 chars)
+            val timeEncoded = EncoderBase32Crockford.encode(time).padStart(TIMESTAMP_ENCODED_LENGTH, '0')
+            val randomEncoded = EncoderBase32Crockford.encode(randomLong, padded = true)
             timeEncoded + randomEncoded
         }
 
@@ -93,87 +104,55 @@ object Ashid {
      * Parse an Ashid into its components
      *
      * @param id The full Ashid string
-     * @return Triple of (prefix, encodedTimestamp, encodedRandom)
+     * @return Triple of (prefix with trailing _, encodedTimestamp, encodedRandom)
      */
     @JvmStatic
     fun parse(id: String): Triple<String, String, String> {
         require(id.isNotEmpty()) { "Invalid Ashid: cannot be empty" }
 
-        // Find the prefix: leading alphabetic characters with optional trailing underscore or dash
+        // Find delimiter (underscore or dash) - no delimiter means no prefix
         var prefixLength = 0
         var hasDelimiter = false
 
-        // First pass: find if there's a delimiter
         for (i in id.indices) {
             when {
                 id[i].isLetter() -> prefixLength++
                 (id[i] == '_' || id[i] == '-') && prefixLength > 0 -> {
-                    prefixLength++
+                    prefixLength++ // Include delimiter
                     hasDelimiter = true
                     break
                 }
-                else -> break
-            }
-        }
-
-        // If no delimiter found, determine prefix based on base length
-        // Base can be 22 chars (standard) or 26 chars (ashid4 format)
-        if (!hasDelimiter && id.length > 26) {
-            prefixLength = id.length - 26
-            // Check if this could be a 26-char base (ashid4)
-            // Validate that the prefix is all letters
-            var valid26 = true
-            for (i in 0 until prefixLength) {
-                if (!id[i].isLetter()) {
-                    valid26 = false
-                    break
-                }
-            }
-            if (!valid26) {
-                // Try 22-char base instead
-                prefixLength = id.length - 22
-                for (i in 0 until prefixLength) {
-                    if (!id[i].isLetter()) {
-                        prefixLength = 0 // No valid prefix
-                        break
-                    }
-                }
-            }
-        } else if (!hasDelimiter && id.length > 22 && id.length != 26) {
-            prefixLength = id.length - 22
-            // Validate that the prefix is all letters
-            for (i in 0 until prefixLength) {
-                if (!id[i].isLetter()) {
-                    prefixLength = 0 // No valid prefix
+                else -> {
+                    // No delimiter found - entire string is base ID (no prefix)
+                    prefixLength = 0
                     break
                 }
             }
         }
 
         // Normalize dash to underscore in prefix
-        val prefix = id.substring(0, prefixLength).replace(Regex("-$"), "_")
+        val prefix = if (hasDelimiter) id.substring(0, prefixLength).replace(Regex("-$"), "_") else ""
         val baseId = id.substring(prefixLength)
 
-        require(baseId.isNotEmpty()) { "Invalid Ashid: must have a base ID after prefix" }
+        require(baseId.isNotEmpty()) { "Invalid Ashid: must have a base ID" }
 
         val (encodedTimestamp, encodedRandom) = if (hasDelimiter) {
-            // Variable length format
-            if (baseId.length <= 13) {
+            // Variable length format (has prefix with delimiter)
+            if (baseId.length <= RANDOM_ENCODED_LENGTH) {
                 // Timestamp was 0 (omitted), entire baseId is random
                 "0" to baseId
             } else {
                 // Timestamp present, random is last 13 chars
-                baseId.substring(0, baseId.length - 13) to baseId.substring(baseId.length - 13)
+                baseId.substring(0, baseId.length - RANDOM_ENCODED_LENGTH) to baseId.substring(baseId.length - RANDOM_ENCODED_LENGTH)
             }
-        } else if (baseId.length == 26) {
-            // Fixed 26-char format (ashid4 - two random components)
-            baseId.substring(0, 13) to baseId.substring(13)
+        } else if (baseId.length == ASHID4_BASE_LENGTH) {
+            // Fixed 26-char format (ashid4 - two random components, no prefix)
+            baseId.substring(0, RANDOM_ENCODED_LENGTH) to baseId.substring(RANDOM_ENCODED_LENGTH)
+        } else if (baseId.length == STANDARD_BASE_LENGTH) {
+            // Fixed 22-char format (standard ashid, no prefix)
+            baseId.substring(0, TIMESTAMP_ENCODED_LENGTH) to baseId.substring(TIMESTAMP_ENCODED_LENGTH)
         } else {
-            // Fixed 22-char format (standard ashid)
-            require(baseId.length == 22) {
-                "Invalid Ashid: base ID must be 22 or 26 characters without underscore delimiter (got ${baseId.length})"
-            }
-            baseId.substring(0, 9) to baseId.substring(9)
+            throw IllegalArgumentException("Invalid Ashid: base ID must be $STANDARD_BASE_LENGTH or $ASHID4_BASE_LENGTH characters without delimiter (got ${baseId.length})")
         }
 
         return Triple(prefix, encodedTimestamp, encodedRandom)
@@ -236,7 +215,7 @@ object Ashid {
      * create4() uses two random values with consistent padding for maximum entropy.
      * Both components are padded to 13 chars each = 26 char base (~106 bits of entropy).
      *
-     * @param prefix Optional alphabetic prefix (may include trailing underscore as delimiter)
+     * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
      * @param random1 First random number (defaults to secure random)
      * @param random2 Second random number (defaults to secure random)
      * @return Ashid string with two random components, consistently padded
@@ -249,23 +228,14 @@ object Ashid {
         random1: Long = EncoderBase32Crockford.secureRandomLong(),
         random2: Long = EncoderBase32Crockford.secureRandomLong()
     ): String {
-        // Validate and normalize prefix
-        val normalizedPrefix = if (!prefix.isNullOrEmpty()) {
-            val withUnderscore = prefix.replace(Regex("-$"), "_")
-            require(withUnderscore.matches(Regex("^[a-zA-Z]+_?$"))) {
-                "Ashid prefix must contain only letters with optional trailing underscore or dash"
-            }
-            withUnderscore.lowercase()
-        } else {
-            null
-        }
+        val normalizedPrefix = normalizePrefix(prefix)
 
         // Validate random values
         require(random1 >= 0 && random2 >= 0) { "Ashid random values must be non-negative" }
 
         // Both components padded to 13 chars for maximum entropy (26 char base)
-        val encoded1 = EncoderBase32Crockford.encode(random1, padded = true) // padded to 13
-        val encoded2 = EncoderBase32Crockford.encode(random2, padded = true) // padded to 13
+        val encoded1 = EncoderBase32Crockford.encode(random1, padded = true)
+        val encoded2 = EncoderBase32Crockford.encode(random2, padded = true)
         val baseId = encoded1 + encoded2
 
         return (normalizedPrefix ?: "") + baseId
@@ -284,8 +254,8 @@ object Ashid {
         return try {
             val (prefix, encodedTimestamp, encodedRandom) = parse(id)
 
-            // Validate prefix format
-            if (prefix.isNotEmpty() && !prefix.matches(Regex("^[a-zA-Z]+_?$"))) {
+            // Validate prefix format (must be alphanumeric ending with _)
+            if (prefix.isNotEmpty() && !prefix.matches(Regex("^[a-zA-Z0-9]+_$"))) {
                 return false
             }
 
@@ -304,7 +274,7 @@ object Ashid {
 /**
  * Create a new Ashid with optional type prefix
  *
- * @param prefix Optional entity type prefix (letters with optional trailing underscore)
+ * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
  * @return Ashid string
  */
 fun ashid(prefix: String? = null): String = Ashid.create(prefix)
@@ -314,10 +284,10 @@ fun ashid(prefix: String? = null): String = Ashid.create(prefix)
  *
  * Unlike the standard ashid() which uses timestamp + random for time-sortability,
  * ashid4() uses two random values for maximum entropy when time-sorting is not needed.
- * Always produces consistently 0-padded output (22 char base).
+ * Always produces consistently 0-padded output (26 char base).
  * Useful for tokens, secrets, or any ID where unpredictability is more important than ordering.
  *
- * @param prefix Optional entity type prefix (letters with optional trailing underscore)
+ * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
  * @return Ashid string with two random components, consistently padded
  */
 fun ashid4(prefix: String? = null): String = Ashid.create4(prefix)
