@@ -180,15 +180,28 @@ object Ashid {
     }
 
     /**
-     * Extract the random component from an Ashid
+     * Extract the random component from an Ashid as Long
+     * Note: For values > Long.MAX_VALUE (from ashid4), use randomULong()
      *
      * @param id Ashid string
-     * @return Random number
+     * @return Random number as Long
      */
     @JvmStatic
     fun random(id: String): Long {
         val (_, _, encodedRandom) = parse(id)
         return EncoderBase32Crockford.decode(encodedRandom)
+    }
+
+    /**
+     * Extract the random component from an Ashid as ULong
+     * Preserves full 64-bit precision for ashid4 values
+     *
+     * @param id Ashid string
+     * @return Random number as ULong
+     */
+    fun randomULong(id: String): ULong {
+        val (_, _, encodedRandom) = parse(id)
+        return EncoderBase32Crockford.decodeULong(encodedRandom)
     }
 
     /**
@@ -213,25 +226,19 @@ object Ashid {
      *
      * Unlike create() which uses timestamp + random for time-sortability,
      * create4() uses two random values with consistent padding for maximum entropy.
-     * Both components are padded to 13 chars each = 26 char base (~106 bits of entropy).
+     * Both components are padded to 13 chars each = 26 char base (128 bits of entropy).
      *
      * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
-     * @param random1 First random number (defaults to secure random)
-     * @param random2 Second random number (defaults to secure random)
+     * @param random1 First random value (defaults to secure random ULong)
+     * @param random2 Second random value (defaults to secure random ULong)
      * @return Ashid string with two random components, consistently padded
-     * @throws IllegalArgumentException if random values are negative
      */
-    @JvmStatic
-    @JvmOverloads
     fun create4(
         prefix: String? = null,
-        random1: Long = EncoderBase32Crockford.secureRandomLong(),
-        random2: Long = EncoderBase32Crockford.secureRandomLong()
+        random1: ULong = EncoderBase32Crockford.secureRandomULong(),
+        random2: ULong = EncoderBase32Crockford.secureRandomULong()
     ): String {
         val normalizedPrefix = normalizePrefix(prefix)
-
-        // Validate random values
-        require(random1 >= 0 && random2 >= 0) { "Ashid random values must be non-negative" }
 
         // Both components padded to 13 chars for maximum entropy (26 char base)
         val encoded1 = EncoderBase32Crockford.encode(random1, padded = true)
@@ -239,6 +246,25 @@ object Ashid {
         val baseId = encoded1 + encoded2
 
         return (normalizedPrefix ?: "") + baseId
+    }
+
+    /**
+     * Create a random Ashid (UUID v4 equivalent) - Long overload for Java compatibility
+     * Note: For full 64-bit entropy, use the ULong version
+     *
+     * @param prefix Optional alphabetic prefix
+     * @param random1 First random number (non-negative Long)
+     * @param random2 Second random number (non-negative Long)
+     * @return Ashid string with two random components
+     */
+    @JvmStatic
+    fun create4Long(
+        prefix: String? = null,
+        random1: Long,
+        random2: Long
+    ): String {
+        require(random1 >= 0 && random2 >= 0) { "Ashid random values must be non-negative" }
+        return create4(prefix, random1.toULong(), random2.toULong())
     }
 
     /**

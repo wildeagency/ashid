@@ -126,4 +126,120 @@ class EncoderBase32CrockfordTest {
             assertTrue(value >= 0)
         }
     }
+
+    @Test
+    fun `secure random uses full 63-bit entropy range`() {
+        // With 63-bit entropy, we should see values that exceed 2^53 (JS MAX_SAFE_INTEGER)
+        // and approach 2^63 - 1 (Long.MAX_VALUE)
+        val samples = 100
+        var sawLargeValue = false
+        val threshold = 1L shl 53 // 2^53
+
+        repeat(samples) {
+            val value = EncoderBase32Crockford.secureRandomLong()
+            if (value > threshold) {
+                sawLargeValue = true
+                return@repeat
+            }
+        }
+
+        // With uniform 63-bit distribution, ~98% of values should exceed 2^53
+        // So we should definitely see at least one in 100 samples
+        assertTrue(sawLargeValue, "Expected to see values > 2^53 with 63-bit entropy")
+    }
+
+    @Test
+    fun `secure random produces values that encode to full 13-char width`() {
+        // Values using full 63 bits should frequently encode to 13 chars
+        // Long.MAX_VALUE (2^63 - 1) encodes to 13 chars
+        val samples = 100
+        var saw13CharEncoding = false
+
+        repeat(samples) {
+            val value = EncoderBase32Crockford.secureRandomLong()
+            val encoded = EncoderBase32Crockford.encode(value)
+            if (encoded.length == 13) {
+                saw13CharEncoding = true
+                return@repeat
+            }
+        }
+
+        assertTrue(saw13CharEncoding, "Expected to see 13-char encodings with 63-bit values")
+    }
+
+    @Test
+    fun `encode handles Long MAX_VALUE correctly`() {
+        val maxValue = Long.MAX_VALUE
+        val encoded = EncoderBase32Crockford.encode(maxValue)
+        val decoded = EncoderBase32Crockford.decode(encoded)
+        assertEquals(maxValue, decoded)
+        assertEquals(13, encoded.length, "Long.MAX_VALUE should encode to 13 chars")
+    }
+
+    @Test
+    fun `secure random generates unique values`() {
+        val values = mutableSetOf<Long>()
+        repeat(100) {
+            values.add(EncoderBase32Crockford.secureRandomLong())
+        }
+        // Should have generated many unique values
+        assertTrue(values.size > 90, "Expected at least 90 unique values from 100 samples")
+    }
+
+    // ==================== ULong (64-bit) tests ====================
+
+    @Test
+    fun `secure random ULong generates full 64-bit entropy`() {
+        // With 64-bit entropy, we should see values that exceed 2^63 (Long.MAX_VALUE)
+        val samples = 100
+        var sawValueBeyondLongMax = false
+        val threshold = Long.MAX_VALUE.toULong()
+
+        repeat(samples) {
+            val value = EncoderBase32Crockford.secureRandomULong()
+            if (value > threshold) {
+                sawValueBeyondLongMax = true
+                return@repeat
+            }
+        }
+
+        // With uniform 64-bit distribution, ~50% should exceed Long.MAX_VALUE
+        assertTrue(sawValueBeyondLongMax, "Expected to see values > Long.MAX_VALUE with 64-bit entropy")
+    }
+
+    @Test
+    fun `encode ULong handles MAX_VALUE correctly`() {
+        val maxValue = ULong.MAX_VALUE
+        val encoded = EncoderBase32Crockford.encode(maxValue)
+        val decoded = EncoderBase32Crockford.decodeULong(encoded)
+        assertEquals(maxValue, decoded)
+        assertEquals(13, encoded.length, "ULong.MAX_VALUE should encode to 13 chars")
+    }
+
+    @Test
+    fun `encode ULong roundtrip works for full range`() {
+        val testValues = listOf(
+            0UL,
+            1UL,
+            Long.MAX_VALUE.toULong(),
+            Long.MAX_VALUE.toULong() + 1UL,
+            ULong.MAX_VALUE - 1UL,
+            ULong.MAX_VALUE
+        )
+
+        for (value in testValues) {
+            val encoded = EncoderBase32Crockford.encode(value)
+            val decoded = EncoderBase32Crockford.decodeULong(encoded)
+            assertEquals(value, decoded, "Roundtrip failed for value $value")
+        }
+    }
+
+    @Test
+    fun `secure random ULong generates unique values`() {
+        val values = mutableSetOf<ULong>()
+        repeat(100) {
+            values.add(EncoderBase32Crockford.secureRandomULong())
+        }
+        assertTrue(values.size > 90, "Expected at least 90 unique values from 100 samples")
+    }
 }

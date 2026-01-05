@@ -116,16 +116,113 @@ describe('EncoderBase32Crockford', () => {
     });
   });
 
+  describe('encodeBigInt', () => {
+    it('should encode zero', () => {
+      expect(EncoderBase32Crockford.encodeBigInt(0n)).toBe('0');
+    });
+
+    it('should encode small BigInt values', () => {
+      expect(EncoderBase32Crockford.encodeBigInt(1n)).toBe('1');
+      expect(EncoderBase32Crockford.encodeBigInt(31n)).toBe('z');
+      expect(EncoderBase32Crockford.encodeBigInt(32n)).toBe('10');
+    });
+
+    it('should encode values beyond MAX_SAFE_INTEGER', () => {
+      // 2^53 is beyond MAX_SAFE_INTEGER
+      const beyondSafe = BigInt(Number.MAX_SAFE_INTEGER) + 1n;
+      const encoded = EncoderBase32Crockford.encodeBigInt(beyondSafe);
+      expect(encoded).toBeTruthy();
+      expect(encoded.length).toBeGreaterThan(10);
+    });
+
+    it('should encode full 64-bit values', () => {
+      // Max 64-bit unsigned value: 2^64 - 1 = 18446744073709551615
+      const max64bit = 18446744073709551615n;
+      const encoded = EncoderBase32Crockford.encodeBigInt(max64bit);
+      // 64 bits needs about 13 base32 chars (65 bits / 5 bits per char)
+      expect(encoded).toBe('fzzzzzzzzzzzz');
+    });
+
+    it('should pad when requested', () => {
+      const encoded = EncoderBase32Crockford.encodeBigInt(123n, true);
+      expect(encoded).toHaveLength(13);
+      expect(encoded).toBe('000000000003v');
+    });
+
+    it('should throw on negative BigInt', () => {
+      expect(() => EncoderBase32Crockford.encodeBigInt(-1n)).toThrow();
+    });
+  });
+
+  describe('decodeBigInt', () => {
+    it('should decode zero', () => {
+      expect(EncoderBase32Crockford.decodeBigInt('0')).toBe(0n);
+    });
+
+    it('should decode small values', () => {
+      expect(EncoderBase32Crockford.decodeBigInt('1')).toBe(1n);
+      expect(EncoderBase32Crockford.decodeBigInt('z')).toBe(31n);
+      expect(EncoderBase32Crockford.decodeBigInt('10')).toBe(32n);
+    });
+
+    it('should decode values beyond MAX_SAFE_INTEGER', () => {
+      const beyondSafe = BigInt(Number.MAX_SAFE_INTEGER) + 1n;
+      const encoded = EncoderBase32Crockford.encodeBigInt(beyondSafe);
+      const decoded = EncoderBase32Crockford.decodeBigInt(encoded);
+      expect(decoded).toBe(beyondSafe);
+    });
+
+    it('should decode full 64-bit values', () => {
+      const max64bit = 18446744073709551615n;
+      const encoded = EncoderBase32Crockford.encodeBigInt(max64bit);
+      const decoded = EncoderBase32Crockford.decodeBigInt(encoded);
+      expect(decoded).toBe(max64bit);
+    });
+
+    it('should be case-insensitive', () => {
+      expect(EncoderBase32Crockford.decodeBigInt('ABC')).toBe(
+        EncoderBase32Crockford.decodeBigInt('abc')
+      );
+    });
+  });
+
+  describe('BigInt roundtrip', () => {
+    it('should encode and decode to same BigInt value', () => {
+      const testCases = [0n, 1n, 31n, 32n, 100n, 1000n, 123456n, BigInt(Date.now())];
+
+      testCases.forEach((num) => {
+        const encoded = EncoderBase32Crockford.encodeBigInt(num);
+        const decoded = EncoderBase32Crockford.decodeBigInt(encoded);
+        expect(decoded).toBe(num);
+      });
+    });
+
+    it('should handle values beyond safe integer range', () => {
+      const testCases = [
+        BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        BigInt(Number.MAX_SAFE_INTEGER) * 2n,
+        18446744073709551615n, // max 64-bit
+      ];
+
+      testCases.forEach((num) => {
+        const encoded = EncoderBase32Crockford.encodeBigInt(num);
+        const decoded = EncoderBase32Crockford.decodeBigInt(encoded);
+        expect(decoded).toBe(num);
+      });
+    });
+  });
+
   describe('secureRandomLong', () => {
-    it('should generate positive numbers', () => {
+    it('should generate positive BigInt values', () => {
       for (let i = 0; i < 100; i++) {
         const random = EncoderBase32Crockford.secureRandomLong();
-        expect(random).toBeGreaterThanOrEqual(0);
+        expect(typeof random).toBe('bigint');
+        expect(random).toBeGreaterThanOrEqual(0n);
       }
     });
 
     it('should generate different values', () => {
-      const values = new Set<number>();
+      const values = new Set<bigint>();
       for (let i = 0; i < 100; i++) {
         values.add(EncoderBase32Crockford.secureRandomLong());
       }
@@ -133,11 +230,40 @@ describe('EncoderBase32Crockford', () => {
       expect(values.size).toBeGreaterThan(90);
     });
 
-    it('should generate safe integers', () => {
-      for (let i = 0; i < 100; i++) {
+    it('should generate full 64-bit entropy', () => {
+      // With 64-bit entropy, we should see values that exceed 53-bit MAX_SAFE_INTEGER
+      const samples = 100;
+      let sawValueBeyondSafe = false;
+      const threshold = BigInt(Number.MAX_SAFE_INTEGER);
+
+      for (let i = 0; i < samples; i++) {
         const random = EncoderBase32Crockford.secureRandomLong();
-        expect(Number.isSafeInteger(random)).toBe(true);
+        if (random > threshold) {
+          sawValueBeyondSafe = true;
+          break;
+        }
       }
+
+      // With uniform 64-bit distribution, ~50% of values should exceed 2^53
+      // So we should definitely see at least one in 100 samples
+      expect(sawValueBeyondSafe).toBe(true);
+    });
+
+    it('should produce values that encode to full 13-char width', () => {
+      // Values using full 64 bits should encode to 13 chars (not just 11 for 53-bit)
+      const samples = 100;
+      let saw13CharEncoding = false;
+
+      for (let i = 0; i < samples; i++) {
+        const random = EncoderBase32Crockford.secureRandomLong();
+        const encoded = EncoderBase32Crockford.encodeBigInt(random);
+        if (encoded.length === 13) {
+          saw13CharEncoding = true;
+          break;
+        }
+      }
+
+      expect(saw13CharEncoding).toBe(true);
     });
   });
 

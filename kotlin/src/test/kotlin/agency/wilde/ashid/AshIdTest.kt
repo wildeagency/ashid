@@ -425,19 +425,19 @@ class AshidTest {
     }
 
     @Test
-    fun `create4 throws on negative random values`() {
+    fun `create4Long throws on negative random values`() {
         assertThrows<IllegalArgumentException> {
-            Ashid.create4(random1 = -1)
+            Ashid.create4Long(random1 = -1, random2 = 0)
         }
         assertThrows<IllegalArgumentException> {
-            Ashid.create4(random2 = -1)
+            Ashid.create4Long(random1 = 0, random2 = -1)
         }
     }
 
     @Test
     fun `create4 deterministic output with known randoms`() {
-        val id1 = Ashid.create4("tok", 1000, 2000)
-        val id2 = Ashid.create4("tok", 1000, 2000)
+        val id1 = Ashid.create4("tok", 1000UL, 2000UL)
+        val id2 = Ashid.create4("tok", 1000UL, 2000UL)
         assertEquals(id1, id2)
     }
 
@@ -461,7 +461,7 @@ class AshidTest {
     @Test
     fun `create4 uses 0-padding for consistent length`() {
         // With small random values that would normally be short
-        val id = Ashid.create4(random1 = 1, random2 = 1)
+        val id = Ashid.create4(random1 = 1UL, random2 = 1UL)
         assertEquals(26, id.length)
         assertTrue(id.startsWith("000000000000")) // Padded first component (13 chars)
     }
@@ -479,6 +479,58 @@ class AshidTest {
         val id = ashid4()
         assertEquals(26, id.length)
         assertTrue(Ashid.isValid(id))
+    }
+
+    @Test
+    fun `create4 uses full 64-bit entropy for both components`() {
+        // With 64-bit entropy per component, we should see values > 2^53
+        // Values > 2^53 encode to > 11 chars in base32
+        val samples = 100
+        var sawFullEntropy = false
+
+        repeat(samples) {
+            val id = ashid4()
+            val (_, encoded1, encoded2) = Ashid.parse(id)
+
+            // Check if any encoded component (stripped of leading zeros) is > 11 chars
+            // Values > 2^53 encode to > 11 chars in base32
+            if (encoded1.trimStart('0').length > 11 || encoded2.trimStart('0').length > 11) {
+                sawFullEntropy = true
+                return@repeat
+            }
+        }
+
+        // With uniform 64-bit distribution, ~99% should have values > 2^53
+        assertTrue(sawFullEntropy, "Expected to see 64-bit values in ashid4 components")
+    }
+
+    @Test
+    fun `create4 handles ULong MAX_VALUE random values`() {
+        val maxValue = ULong.MAX_VALUE
+        val id = Ashid.create4("tok", maxValue, maxValue)
+        assertTrue(id.startsWith("tok_"))
+        assertEquals(30, id.length)
+
+        // Should be parseable
+        val (prefix, encoded1, encoded2) = Ashid.parse(id)
+        assertEquals("tok_", prefix)
+        assertEquals(13, encoded1.length)
+        assertEquals(13, encoded2.length)
+    }
+
+    @Test
+    fun `create4 preserves large random values in roundtrip`() {
+        val random1 = ULong.MAX_VALUE - 1000UL
+        val random2 = ULong.MAX_VALUE / 2UL
+        val id = Ashid.create4("tok", random1, random2)
+
+        // Parse and verify the values can be decoded
+        val (_, encoded1, encoded2) = Ashid.parse(id)
+        val decoded1 = EncoderBase32Crockford.decodeULong(encoded1)
+        val decoded2 = EncoderBase32Crockford.decodeULong(encoded2)
+
+        assertEquals(random1, decoded1)
+        assertEquals(random2, decoded2)
     }
 
 }

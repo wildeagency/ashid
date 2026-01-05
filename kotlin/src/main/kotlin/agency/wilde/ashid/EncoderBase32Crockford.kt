@@ -35,6 +35,19 @@ object EncoderBase32Crockford {
     }
 
     /**
+     * Encode an unsigned long (ULong) to Crockford Base32 string
+     * Supports full 64-bit range for maximum entropy
+     *
+     * @param n Unsigned long to encode
+     * @param padded If true, pad result to 13 characters (for consistent ashid length)
+     * @return Base32 encoded string
+     */
+    fun encode(n: ULong, padded: Boolean = false): String {
+        val encoded = encodeRecursiveULong(n)
+        return if (padded) encoded.padStart(13, '0') else encoded
+    }
+
+    /**
      * Recursive encoding implementation
      */
     private fun encodeRecursive(n: Long): String {
@@ -47,6 +60,22 @@ object EncoderBase32Crockford {
             ALPHABET[remainder].toString()
         } else {
             encodeRecursive(quotient) + ALPHABET[remainder]
+        }
+    }
+
+    /**
+     * Recursive encoding implementation for ULong
+     */
+    private fun encodeRecursiveULong(n: ULong): String {
+        if (n == 0UL) return "0"
+
+        val remainder = (n % 32UL).toInt()
+        val quotient = n / 32UL
+
+        return if (quotient == 0UL) {
+            ALPHABET[remainder].toString()
+        } else {
+            encodeRecursiveULong(quotient) + ALPHABET[remainder]
         }
     }
 
@@ -67,6 +96,28 @@ object EncoderBase32Crockford {
             val value = decodeChar(char)
             require(value != -1) { "Invalid character in Base32 string: '$char'" }
             result = result * 32 + value
+        }
+
+        return result
+    }
+
+    /**
+     * Decode a Crockford Base32 string to unsigned long (ULong)
+     * Preserves full 64-bit precision
+     *
+     * @param str Base32 encoded string
+     * @return Decoded ULong
+     */
+    fun decodeULong(str: String): ULong {
+        require(str.isNotEmpty()) { "Input string cannot be empty" }
+
+        var result = 0UL
+        val normalized = str.lowercase()
+
+        for (char in normalized) {
+            val value = decodeChar(char)
+            require(value != -1) { "Invalid character in Base32 string: '$char'" }
+            result = result * 32UL + value.toULong()
         }
 
         return result
@@ -112,9 +163,29 @@ object EncoderBase32Crockford {
     }
 
     /**
-     * Generate a cryptographically secure random positive long
+     * Generate a cryptographically secure random unsigned long (ULong)
+     * Returns full 64-bit entropy, like UUID does
      *
-     * @return Random long within safe range
+     * @return Random ULong with full 64-bit range
+     */
+    fun secureRandomULong(): ULong {
+        val bytes = ByteArray(8)
+        secureRandom.nextBytes(bytes)
+
+        // Convert to ULong - full 64-bit range, no sign bit masking
+        var value = 0UL
+        for (byte in bytes) {
+            value = (value shl 8) or (byte.toUByte().toULong())
+        }
+
+        return value
+    }
+
+    /**
+     * Generate a cryptographically secure random positive long
+     * Note: Limited to 63 bits. For full 64-bit entropy, use secureRandomULong()
+     *
+     * @return Random long within safe range (0 to Long.MAX_VALUE)
      */
     @JvmStatic
     fun secureRandomLong(): Long {

@@ -30,6 +30,23 @@ export class EncoderBase32Crockford {
   }
 
   /**
+   * Encode a non-negative BigInt to Crockford Base32 string
+   * Supports full 64-bit values (and beyond)
+   *
+   * @param n Non-negative BigInt to encode
+   * @param padded If true, pad result to 13 characters (for consistent Ashid length)
+   * @returns Base32 encoded string
+   */
+  static encodeBigInt(n: bigint, padded: boolean = false): string {
+    if (n < 0n) {
+      throw new Error('Input must be a non-negative BigInt');
+    }
+
+    const encoded = this.encodeBigIntRecursive(n);
+    return padded ? encoded.padStart(13, '0') : encoded;
+  }
+
+  /**
    * Recursive encoding implementation
    */
   private static encodeRecursive(n: number): string {
@@ -43,6 +60,22 @@ export class EncoderBase32Crockford {
     }
 
     return this.encodeRecursive(quotient) + this.alphabet[remainder];
+  }
+
+  /**
+   * Recursive BigInt encoding implementation
+   */
+  private static encodeBigIntRecursive(n: bigint): string {
+    if (n === 0n) return '0';
+
+    const remainder = Number(n % 32n);
+    const quotient = n / 32n;
+
+    if (quotient === 0n) {
+      return this.alphabet[remainder];
+    }
+
+    return this.encodeBigIntRecursive(quotient) + this.alphabet[remainder];
   }
 
   /**
@@ -68,6 +101,35 @@ export class EncoderBase32Crockford {
       }
 
       result = result * 32 + value;
+    }
+
+    return result;
+  }
+
+  /**
+   * Decode a Crockford Base32 string to BigInt
+   * Preserves full precision for 64-bit values
+   *
+   * @param str Base32 encoded string
+   * @returns Decoded BigInt
+   */
+  static decodeBigInt(str: string): bigint {
+    if (!str || str.length === 0) {
+      throw new Error('Input string cannot be empty');
+    }
+
+    let result = 0n;
+    const normalized = str.toLowerCase();
+
+    for (let i = 0; i < normalized.length; i++) {
+      const char = normalized[i];
+      const value = this.decodeChar(char);
+
+      if (value === -1) {
+        throw new Error(`Invalid character in Base32 string: '${char}'`);
+      }
+
+      result = result * 32n + BigInt(value);
     }
 
     return result;
@@ -178,24 +240,20 @@ export class EncoderBase32Crockford {
   }
 
   /**
-   * Generate a cryptographically secure random positive integer
+   * Generate a cryptographically secure random 64-bit BigInt
    *
    * Uses Node.js crypto module or Web Crypto API
-   * Returns a positive integer within safe JavaScript number range
+   * Returns a full 64-bit unsigned BigInt for maximum entropy
    */
-  static secureRandomLong(): number {
-    // Maximum safe integer that fits in 53 bits
-    const MAX_SAFE_INT = Number.MAX_SAFE_INTEGER;
-
+  static secureRandomLong(): bigint {
     // Try Node.js crypto module first
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const crypto = require('crypto') as typeof import('crypto');
       const buffer = crypto.randomBytes(8);
 
-      // Read as BigInt and convert to safe integer range
-      const randomBigInt = buffer.readBigUInt64BE(0);
-      return Number(randomBigInt % BigInt(MAX_SAFE_INT));
+      // Read as full 64-bit BigInt - no truncation
+      return buffer.readBigUInt64BE(0);
     } catch (e) {
       // Not in Node.js environment or crypto not available
     }
@@ -206,16 +264,18 @@ export class EncoderBase32Crockford {
       const buffer = new Uint32Array(2);
       cryptoObj.getRandomValues(buffer);
 
-      // Combine two 32-bit values into a 53-bit number (max safe integer)
-      const high = buffer[0] & 0x1FFFFF; // 21 bits
-      const low = buffer[1]; // 32 bits
-      return (high * 0x100000000) + low;
+      // Combine two 32-bit values into a full 64-bit BigInt
+      const high = BigInt(buffer[0]);
+      const low = BigInt(buffer[1]);
+      return (high << 32n) | low;
     }
 
     // Fallback for testing environments without crypto
     // NOT cryptographically secure - should only be used in tests
     console.warn('Crypto API not available, using Math.random() (NOT SECURE)');
-    return Math.floor(Math.random() * MAX_SAFE_INT);
+    const high = BigInt(Math.floor(Math.random() * 0x100000000));
+    const low = BigInt(Math.floor(Math.random() * 0x100000000));
+    return (high << 32n) | low;
   }
 
   /**

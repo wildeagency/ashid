@@ -57,7 +57,7 @@ export class Ashid {
    *
    * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
    * @param time Timestamp in milliseconds (defaults to current time, min 0, max Dec 12 3084)
-   * @param randomLong Random number for uniqueness (defaults to secure random)
+   * @param randomLong Random value for uniqueness (defaults to secure random 64-bit BigInt)
    * @returns Ashid string
    * @throws Error if timestamp is negative or exceeds maximum
    * @throws Error if random value is negative
@@ -65,7 +65,7 @@ export class Ashid {
   static create(
     prefix?: string,
     time: number = Date.now(),
-    randomLong: number = EncoderBase32Crockford.secureRandomLong()
+    randomLong: number | bigint = EncoderBase32Crockford.secureRandomLong()
   ): string {
     const normalizedPrefix = this.normalizePrefix(prefix);
 
@@ -78,9 +78,9 @@ export class Ashid {
       throw new Error(`Ashid timestamp must not exceed ${MAX_TIMESTAMP} (Dec 12, 3084)`);
     }
 
-    // Validate random value
-    const flooredRandom = Math.floor(randomLong);
-    if (flooredRandom < 0) {
+    // Validate and normalize random value
+    const randomBigInt = typeof randomLong === 'bigint' ? randomLong : BigInt(Math.floor(randomLong));
+    if (randomBigInt < 0n) {
       throw new Error('Ashid random value must be non-negative');
     }
 
@@ -89,8 +89,8 @@ export class Ashid {
     if (normalizedPrefix) {
       // With prefix: variable length (no padding on timestamp when 0)
       const randomEncoded = flooredTime > 0
-        ? EncoderBase32Crockford.encode(flooredRandom, true)
-        : EncoderBase32Crockford.encode(flooredRandom);
+        ? EncoderBase32Crockford.encodeBigInt(randomBigInt, true)
+        : EncoderBase32Crockford.encodeBigInt(randomBigInt);
 
       baseId = flooredTime > 0
         ? EncoderBase32Crockford.encode(flooredTime) + randomEncoded
@@ -98,7 +98,7 @@ export class Ashid {
     } else {
       // No prefix: fixed length (pad timestamp to 9, random to 13 = 22 chars)
       const timeEncoded = EncoderBase32Crockford.encode(flooredTime).padStart(TIMESTAMP_ENCODED_LENGTH, '0');
-      const randomEncoded = EncoderBase32Crockford.encode(flooredRandom, true);
+      const randomEncoded = EncoderBase32Crockford.encodeBigInt(randomBigInt, true);
       baseId = timeEncoded + randomEncoded;
     }
 
@@ -199,11 +199,11 @@ export class Ashid {
    * Extract the random component from an Ashid
    *
    * @param id Ashid string
-   * @returns Random number
+   * @returns Random value as BigInt (preserves full 64-bit precision)
    */
-  static random(id: string): number {
+  static random(id: string): bigint {
     const [, , encodedRandom] = this.parse(id);
-    return EncoderBase32Crockford.decode(encodedRandom);
+    return EncoderBase32Crockford.decodeBigInt(encodedRandom);
   }
 
   /**
@@ -245,7 +245,7 @@ export class Ashid {
   static normalize(id: string): string {
     const [prefix, encodedTimestamp, encodedRandom] = this.parse(id);
     const timestamp = EncoderBase32Crockford.decode(encodedTimestamp);
-    const random = EncoderBase32Crockford.decode(encodedRandom);
+    const random = EncoderBase32Crockford.decodeBigInt(encodedRandom);
     // Lowercase the prefix
     const normalizedPrefix = prefix ? prefix.toLowerCase() : undefined;
     return this.create(normalizedPrefix, timestamp, random);
@@ -256,30 +256,30 @@ export class Ashid {
    *
    * Unlike create() which uses timestamp + random for time-sortability,
    * create4() uses two random values with consistent padding for maximum entropy.
-   * Both components are padded to 13 chars each = 26 char base (~106 bits of entropy).
+   * Both components are padded to 13 chars each = 26 char base (128 bits of entropy).
    *
    * @param prefix Optional alphabetic prefix (delimiter auto-added, omit trailing _ or -)
-   * @param random1 First random number (defaults to secure random)
-   * @param random2 Second random number (defaults to secure random)
+   * @param random1 First random value (defaults to secure random 64-bit BigInt)
+   * @param random2 Second random value (defaults to secure random 64-bit BigInt)
    * @returns Ashid string with two random components, consistently padded
    */
   static create4(
     prefix?: string,
-    random1: number = EncoderBase32Crockford.secureRandomLong(),
-    random2: number = EncoderBase32Crockford.secureRandomLong()
+    random1: number | bigint = EncoderBase32Crockford.secureRandomLong(),
+    random2: number | bigint = EncoderBase32Crockford.secureRandomLong()
   ): string {
     const normalizedPrefix = this.normalizePrefix(prefix);
 
-    // Validate random values
-    const flooredRandom1 = Math.floor(random1);
-    const flooredRandom2 = Math.floor(random2);
-    if (flooredRandom1 < 0 || flooredRandom2 < 0) {
+    // Validate and normalize random values
+    const randomBigInt1 = typeof random1 === 'bigint' ? random1 : BigInt(Math.floor(random1));
+    const randomBigInt2 = typeof random2 === 'bigint' ? random2 : BigInt(Math.floor(random2));
+    if (randomBigInt1 < 0n || randomBigInt2 < 0n) {
       throw new Error('Ashid random values must be non-negative');
     }
 
     // Both components padded to 13 chars for maximum entropy (26 char base)
-    const encoded1 = EncoderBase32Crockford.encode(flooredRandom1, true);
-    const encoded2 = EncoderBase32Crockford.encode(flooredRandom2, true);
+    const encoded1 = EncoderBase32Crockford.encodeBigInt(randomBigInt1, true);
+    const encoded2 = EncoderBase32Crockford.encodeBigInt(randomBigInt2, true);
     const baseId = encoded1 + encoded2;
 
     return (normalizedPrefix || '') + baseId;
