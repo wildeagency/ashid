@@ -20,7 +20,7 @@ mod error;
 
 pub use crate::ashid::{new, new4, parse_ashid, Ashid};
 pub use encoder::EncoderBase32Crockford;
-pub use error::AshidError;
+pub use error::{AshidError, InvalidIdReason};
 
 /// Maximum supported timestamp (Dec 12, 3084).
 pub const MAX_TIMESTAMP: u64 = 35_184_372_088_831;

@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::encoder::EncoderBase32Crockford;
-use crate::error::AshidError;
+use crate::error::{AshidError, InvalidIdReason};
 use crate::MAX_TIMESTAMP;
 
 const RANDOM_ENCODED_LENGTH: usize = 13;
@@ -42,19 +42,6 @@ fn normalize_prefix(prefix: Option<&str>) -> Option<String> {
     }
 }
 
-fn pad_left(s: &str, target_len: usize, pad: char) -> String {
-    if s.len() >= target_len {
-        s.to_string()
-    } else {
-        let mut out = String::with_capacity(target_len);
-        for _ in 0..(target_len - s.len()) {
-            out.push(pad);
-        }
-        out.push_str(s);
-        out
-    }
-}
-
 impl Ashid {
     /// Create a new Ashid with optional prefix, timestamp, and random value.
     /// Defaults to current time and a secure random `u64`.
@@ -67,10 +54,7 @@ impl Ashid {
 
         let time = time.unwrap_or_else(now_ms);
         if time > MAX_TIMESTAMP {
-            return Err(AshidError::InvalidTimestamp(format!(
-                "Ashid timestamp must not exceed {} (Dec 12, 3084)",
-                MAX_TIMESTAMP
-            )));
+            return Err(AshidError::InvalidTimestamp(time));
         }
 
         let random = random_long.unwrap_or_else(EncoderBase32Crockford::secure_random_long);
@@ -83,11 +67,8 @@ impl Ashid {
                 EncoderBase32Crockford::encode(random, false)
             }
         } else {
-            let time_encoded = pad_left(
-                &EncoderBase32Crockford::encode(time, false),
-                TIMESTAMP_ENCODED_LENGTH,
-                '0',
-            );
+            let raw = EncoderBase32Crockford::encode(time, false);
+            let time_encoded = format!("{:0>width$}", raw, width = TIMESTAMP_ENCODED_LENGTH);
             let random_encoded = EncoderBase32Crockford::encode(random, true);
             time_encoded + &random_encoded
         };
@@ -116,7 +97,7 @@ impl Ashid {
     /// Prefix retains its trailing `_` (empty string if no prefix).
     pub fn parse(id: &str) -> Result<(String, String, String), AshidError> {
         if id.is_empty() {
-            return Err(AshidError::InvalidId("cannot be empty".into()));
+            return Err(AshidError::InvalidId(InvalidIdReason::Empty));
         }
 
         let bytes = id.as_bytes();
@@ -148,7 +129,7 @@ impl Ashid {
 
         let base_id = &id[prefix_length..];
         if base_id.is_empty() {
-            return Err(AshidError::InvalidId("must have a base ID".into()));
+            return Err(AshidError::InvalidId(InvalidIdReason::MissingBase));
         }
 
         let (encoded_timestamp, encoded_random) = if has_delimiter {
@@ -169,11 +150,8 @@ impl Ashid {
                 base_id[TIMESTAMP_ENCODED_LENGTH..].to_string(),
             )
         } else {
-            return Err(AshidError::InvalidId(format!(
-                "base ID must be {} or {} characters without delimiter (got {})",
-                STANDARD_BASE_LENGTH,
-                ASHID4_BASE_LENGTH,
-                base_id.len()
+            return Err(AshidError::InvalidId(InvalidIdReason::WrongBaseLength(
+                base_id.len(),
             )));
         };
 
@@ -199,12 +177,8 @@ impl Ashid {
 
     /// Validate whether a string is a well-formed Ashid.
     pub fn is_valid(id: &str) -> bool {
-        if id.is_empty() {
+        let Ok((prefix, ts, rand)) = Self::parse(id) else {
             return false;
-        }
-        let (prefix, ts, rand) = match Self::parse(id) {
-            Ok(parts) => parts,
-            Err(_) => return false,
         };
         if !prefix.is_empty() && !is_valid_prefix(&prefix) {
             return false;

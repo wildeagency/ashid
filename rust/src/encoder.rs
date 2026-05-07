@@ -1,4 +1,4 @@
-use crate::error::AshidError;
+use crate::error::{AshidError, InvalidIdReason};
 
 const ALPHABET: &[u8; 32] = b"0123456789abcdefghjkmnpqrstvwxyz";
 const PADDED_LENGTH: usize = 13;
@@ -106,7 +106,7 @@ impl EncoderBase32Crockford {
     /// map to their canonical digits; matching is case-insensitive.
     pub fn decode(s: &str) -> Result<u64, AshidError> {
         if s.is_empty() {
-            return Err(AshidError::InvalidId("input string cannot be empty".into()));
+            return Err(AshidError::InvalidId(InvalidIdReason::Empty));
         }
 
         let mut result: u64 = 0;
