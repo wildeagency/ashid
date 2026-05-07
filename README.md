@@ -64,16 +64,20 @@ val rawId = ashid()           // "1kbg1jmtt4v3x8k9p2m1n0w"
 
 ## How ashid Compares
 
-| Feature | ashid | uuid | nanoid | cuid2 | ulid |
-|---------|-------|------|--------|-------|------|
-| Type prefixes | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Time-sortable | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Human-readable | ✅ Crockford Base32 | ❌ Hex | ⚠️ Base64 | ⚠️ | ⚠️ |
-| Case-insensitive | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Character correction | ✅ I→1, O→0 | ❌ | ❌ | ❌ | ❌ |
-| Double-click selectable | ✅ | ❌ Hyphens | ✅ | ✅ | ✅ |
-| URL-safe | ✅ | ⚠️ Needs encoding | ✅ | ✅ | ✅ |
-| Zero dependencies | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Feature | ashid | uuid v4 | nanoid | cuid2 | ulid | typeid | ksuid |
+|---------|-------|---------|--------|-------|------|--------|-------|
+| Encoding | Crockford Base32 | Hex | URL-safe (64-char) | Base36 (lowercase) | Crockford Base32 | Crockford Base32 (lowercase) | Base62 |
+| Type prefixes | ✅ Built-in | ❌ | ❌ | ❌ | ❌ | ✅ Built-in | ❌ |
+| Time-sortable | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ (UUIDv7) | ✅ |
+| Case-insensitive | ✅ | ✅ | ❌ | ⚠️¹ | ✅ | ⚠️² | ❌ |
+| Lookalike correction (I→1, O→0) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Double-click selectable | ✅ | ❌ Hyphens | ⚠️³ | ✅ | ✅ | ✅ | ✅ |
+
+¹ CUID2 emits only lowercase characters; uppercased IDs are invalid.
+² TypeID's canonical encoding is lowercase; decoders may accept uppercase per spec.
+³ NanoID's default 64-char alphabet includes `-`, which breaks double-click selection in most browsers. Use a custom alphabet to fix.
+
+ashid is the only one of these formats that combines **time-sortability**, **type prefixes**, **case-insensitive Crockford Base32**, **and** lookalike correction (I/L→1, O→0). ULID and TypeID get most of the way there but neither does the I/L/O correction. KSUID is the longest-running of the time-sortable formats but uses case-sensitive Base62.
 
 ## Inspired By
 
@@ -81,6 +85,21 @@ val rawId = ashid()           // "1kbg1jmtt4v3x8k9p2m1n0w"
 - [Douglas Crockford's Base32](https://www.crockford.com/base32.html) — Human-friendly encoding
 - [ULID](https://github.com/ulid/spec) — Time-sortable unique identifiers
 - [TypeID](https://github.com/jetpack-io/typeid) — Type-safe, K-sortable IDs
+- [KSUID](https://github.com/segmentio/ksuid) — K-sortable IDs with second-precision timestamps
+
+## Roadmap
+
+ashid currently ships for **TypeScript/JavaScript** and the **JVM** (Kotlin + Java). The next set of languages we'd like to add, with shared cross-language test vectors so any ID generated in one language decodes identically in every other:
+
+- **Python** — `pip install ashid` for the data, scripting, and AI ecosystems
+- **Go** — backend-heavy fit; the home turf of ULID, KSUID, and TypeID
+- **Rust** — `cargo add ashid` for systems and embedded use
+- **Swift** — first-class native iOS / macOS package
+- **C# / .NET** — NuGet for enterprise stacks
+- **Ruby** — gem for Rails apps
+- **Elixir** — hex package for Phoenix / OTP services
+
+Every implementation should pass the same parity test suite (encoding, decoding, prefix handling, lookalike correction, monotonic sort within the same millisecond). If you want to lead one of these, [open an issue](https://github.com/wildeagency/ashid/issues) — happy to hand off a starter spec and test vectors.
 
 ## Contributing
 
