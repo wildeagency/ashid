@@ -452,29 +452,19 @@ describe('Ashid', () => {
     });
 
     it('should use full 64-bit entropy for both components', () => {
-      // Generate many IDs and check that we see values beyond 53-bit range
       const samples = 100;
       let sawFullEntropy = false;
-      const threshold = BigInt(Number.MAX_SAFE_INTEGER);
 
       for (let i = 0; i < samples; i++) {
         const id = ashid4();
         const [, encoded1, encoded2] = Ashid.parse(id);
 
-        // Parse each component using decodeBigInt (via random())
-        // For ashid4, parse returns both random components
-        const fullId = Ashid.create4(undefined, Ashid.random(id), Ashid.random(id));
-
-        // Check if any generated random exceeds 53-bit
-        // We need to check the raw generated values
-        // The simplest check: look at the encoded length
         if (encoded1.replace(/^0+/, '').length > 11 || encoded2.replace(/^0+/, '').length > 11) {
           sawFullEntropy = true;
           break;
         }
       }
 
-      // With 64-bit entropy, ~50% should have values > 2^53, requiring > 11 chars
       expect(sawFullEntropy).toBe(true);
     });
 
