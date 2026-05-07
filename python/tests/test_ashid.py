@@ -53,7 +53,7 @@ class TestCreate:
         assert len(id) == 22  # No prefix, fixed format
 
     def test_negative_timestamp_raises(self):
-        with pytest.raises(Exception, match="non-negative"):
+        with pytest.raises(ValueError, match="non-negative"):
             Ashid.create(time=-1)
 
     def test_max_timestamp_ok(self):
@@ -62,11 +62,11 @@ class TestCreate:
 
     def test_above_max_timestamp_raises(self):
         max_ts = 35184372088831
-        with pytest.raises(Exception, match="must not exceed"):
+        with pytest.raises(ValueError, match="must not exceed"):
             Ashid.create(time=max_ts + 1)
 
     def test_negative_random_raises(self):
-        with pytest.raises(Exception, match="non-negative"):
+        with pytest.raises(ValueError, match="non-negative"):
             Ashid.create(time=now_ms(), random_long=-1)
 
     def test_unique_ids(self):
@@ -141,11 +141,11 @@ class TestParse:
         assert rand == "c1s"
 
     def test_empty_raises(self):
-        with pytest.raises(Exception, match="cannot be empty"):
+        with pytest.raises(ValueError, match="cannot be empty"):
             Ashid.parse("")
 
     def test_prefix_only_raises(self):
-        with pytest.raises(Exception, match="must have a base ID"):
+        with pytest.raises(ValueError, match="must have a base ID"):
             Ashid.parse("user_")
 
     def test_non_delimited_22_char_no_prefix(self):
@@ -157,7 +157,7 @@ class TestParse:
         assert rand == "90123456789ab"
 
     def test_wrong_length_no_delimiter_raises(self):
-        with pytest.raises(Exception, match="must be 22 or 26 characters"):
+        with pytest.raises(ValueError, match="must be 22 or 26 characters"):
             Ashid.parse("abc123")
 
     def test_dash_normalized_to_underscore(self):
@@ -411,7 +411,7 @@ class TestAshid4:
         assert len(encoded2) == 13
 
     def test_negative_random_raises(self):
-        with pytest.raises(Exception, match="non-negative"):
+        with pytest.raises(ValueError, match="non-negative"):
             Ashid.create4("tok", -1, 100)
-        with pytest.raises(Exception, match="non-negative"):
+        with pytest.raises(ValueError, match="non-negative"):
             Ashid.create4("tok", 100, -1)
