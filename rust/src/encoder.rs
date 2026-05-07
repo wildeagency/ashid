@@ -79,35 +79,23 @@ impl EncoderBase32Crockford {
     /// Encode a `u64` to Crockford Base32. When `padded`, the result is left-padded
     /// with `0` to 13 characters (enough to hold any `u64`).
     pub fn encode(n: u64, padded: bool) -> String {
-        let mut buf = [0u8; PADDED_LENGTH];
-        if n == 0 {
-            buf[PADDED_LENGTH - 1] = b'0';
-            return if padded {
-                let mut s = String::with_capacity(PADDED_LENGTH);
-                for _ in 0..PADDED_LENGTH - 1 {
-                    s.push('0');
-                }
-                s.push('0');
-                s
-            } else {
-                "0".to_string()
-            };
-        }
-
-        let mut value = n;
+        let mut buf = [b'0'; PADDED_LENGTH];
         let mut idx = PADDED_LENGTH;
-        while value > 0 {
+        let mut value = n;
+
+        // Always write at least one digit, even for n == 0 (writes '0' at the last slot).
+        loop {
             idx -= 1;
             let rem = (value % 32) as usize;
             buf[idx] = ALPHABET[rem];
             value /= 32;
+            if value == 0 {
+                break;
+            }
         }
 
+        // Buffer is ASCII (alphabet bytes + leading '0' fills); from_utf8 is safe.
         if padded {
-            for slot in &mut buf[..idx] {
-                *slot = b'0';
-            }
-            // Safe: only ASCII bytes from ALPHABET.
             String::from_utf8(buf.to_vec()).unwrap()
         } else {
             String::from_utf8(buf[idx..].to_vec()).unwrap()
