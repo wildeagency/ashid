@@ -218,19 +218,21 @@ https://app.example.com/orders/order_1kbg1jmts7h2w5r8q4n3m
 
 ## How ashid Compares
 
-| Feature | ashid | uuid | nanoid | cuid2 | ulid |
-|---------|-------|------|--------|-------|------|
-| Type prefixes | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Time-sortable | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Human-readable | ✅ Crockford Base32 | ❌ Hex | ⚠️ Base64 | ⚠️ | ⚠️ |
-| Case-insensitive | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Character correction | ✅ I→1, O→0 | ❌ | ❌ | ❌ | ❌ |
-| Double-click selectable | ✅ | ❌ Hyphens | ✅ | ✅ | ✅ |
-| URL-safe | ✅ | ⚠️ Needs encoding | ✅ | ✅ | ✅ |
-| Zero dependencies | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Self-documenting in logs | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Feature | ashid | uuid v4 | nanoid | cuid2 | ulid | typeid | ksuid |
+|---------|-------|---------|--------|-------|------|--------|-------|
+| Encoding | Crockford Base32 | Hex | URL-safe (64-char) | Base36 (lowercase) | Crockford Base32 | Crockford Base32 (lowercase) | Base62 |
+| Type prefixes | ✅ Built-in | ❌ | ❌ | ❌ | ❌ | ✅ Built-in | ❌ |
+| Time-sortable | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ (UUIDv7) | ✅ |
+| Case-insensitive | ✅ | ✅ | ❌ | ⚠️¹ | ✅ | ⚠️² | ❌ |
+| Lookalike correction (I→1, O→0) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Double-click selectable | ✅ | ❌ Hyphens | ⚠️³ | ✅ | ✅ | ✅ | ✅ |
+| Self-documenting in logs | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 
-**The key difference:** When you see `user_1kbg1jmtt4v3x8k9p2m1n` in a log, you know it's a user. When you see `550e8400-e29b-41d4-a716-446655440000`, you have to grep.
+¹ CUID2 emits only lowercase characters; uppercased IDs are invalid.
+² TypeID's canonical encoding is lowercase; decoders may accept uppercase per spec.
+³ NanoID's default 64-char alphabet includes `-`, which breaks double-click selection in most browsers. Use a custom alphabet to fix.
+
+**The key difference:** When you see `user_1kbg1jmtt4v3x8k9p2m1n` in a log, you know it's a user. When you see `550e8400-e29b-41d4-a716-446655440000`, you have to grep. ULID and KSUID give you sortability but no type. TypeID gives you both, but uses lowercase-only encoding without lookalike correction.
 
 ## Inspired By
 

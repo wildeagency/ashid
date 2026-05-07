@@ -4,17 +4,17 @@ A comprehensive comparison of Ashid with popular unique identifier libraries.
 
 ## Quick Comparison Table
 
-| Feature | Ashid | UUID v4 | NanoID | ULID | CUID2 |
-|---------|-------|---------|--------|------|-------|
-| **Length** | 22 chars | 36 chars | 21 chars | 26 chars | 24 chars |
-| **Time-sortable** | ✅ Yes | ❌ No | ❌ No | ✅ Yes | ❌ No |
-| **Double-click select** | ✅ Yes | ❌ No (hyphens) | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Case-insensitive** | ✅ Yes | ❌ No | ❌ No | ✅ Yes* | ❌ No |
-| **Lookalike mapping** | ✅ Yes | ❌ No | ❌ No | ❌ No | ❌ No |
-| **Type prefixes** | ✅ Built-in | ❌ No | ❌ No | ❌ No | ❌ No |
-| **Encoding** | Crockford Base32 | Hex | Base64-like | Base32 | Base36 |
+| Feature | Ashid | UUID v4 | NanoID | ULID | CUID2 | TypeID | KSUID |
+|---------|-------|---------|--------|------|-------|--------|-------|
+| **Length** | 22 chars | 36 chars | 21 chars | 26 chars | 24 chars | 26 + prefix | 27 chars |
+| **Encoding** | Crockford Base32 | Hex | URL-safe 64-char | Crockford Base32 | Base36 (lowercase) | Crockford Base32 (lowercase) | Base62 |
+| **Time-sortable** | ✅ Yes | ❌ No | ❌ No | ✅ Yes | ❌ No | ✅ Yes (UUIDv7) | ✅ Yes |
+| **Double-click select** | ✅ Yes | ❌ No (hyphens) | ⚠️ default has `-` | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Case-insensitive** | ✅ Yes | ✅ Yes | ❌ No | ✅ Yes¹ | ⚠️ lowercase only | ⚠️ lowercase canonical | ❌ No |
+| **Lookalike mapping (I→1, O→0)** | ✅ Yes | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Type prefixes** | ✅ Built-in | ❌ No | ❌ No | ❌ No | ❌ No | ✅ Built-in | ❌ No |
 
-*ULID uses standard Base32 which is case-insensitive but doesn't map lookalikes
+¹ ULID's spec says case-insensitive but does not require Crockford lookalike mapping; most implementations reject `I`/`L`/`O` rather than coercing them to `1`/`1`/`0`.
 
 ## Detailed Comparisons
 
