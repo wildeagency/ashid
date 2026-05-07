@@ -39,6 +39,8 @@ asset_1kbg1jmtr9k5v2x8p4m1n ← Obviously an asset
 |---------|----------|---------|
 | [ashid](./typescript/) | TypeScript/JavaScript | `npm install ashid` |
 | ashid | Kotlin/Java | `implementation("agency.wilde:ashid:1.0.0")` |
+| [ashid](./python/) | Python | `pip install ashid` |
+| [ashid](./go/) | Go | `go get github.com/IodeSystems/ashid/go` |
 
 ## Quick Start
 
@@ -61,6 +63,17 @@ import agency.wilde.ashid.ashid
 val userId = ashid("user_")   // "user_1kbg1jmtt4v3x8k9p2m1n"
 val rawId = ashid()           // "1kbg1jmtt4v3x8k9p2m1n0w"
 ```
+
+### Go
+
+```go
+import ashid "github.com/IodeSystems/ashid/go"
+
+userID := ashid.New("user")   // "user_1kbg1jmtt4v3x8k9p2m1n"
+rawID := ashid.New()          // "1kbg1jmtt4v3x8k9p2m1n0w"
+```
+
+See the [Go README](./go/README.md) for full API documentation.
 
 ## How ashid Compares
 
@@ -91,8 +104,6 @@ ashid is the only one of these formats that combines **time-sortability**, **typ
 
 ashid currently ships for **TypeScript/JavaScript** and the **JVM** (Kotlin + Java). The next set of languages we'd like to add, with shared cross-language test vectors so any ID generated in one language decodes identically in every other:
 
-- **Python** — `pip install ashid` for the data, scripting, and AI ecosystems
-- **Go** — backend-heavy fit; the home turf of ULID, KSUID, and TypeID
 - **Rust** — `cargo add ashid` for systems and embedded use
 - **Swift** — first-class native iOS / macOS package
 - **C# / .NET** — NuGet for enterprise stacks
