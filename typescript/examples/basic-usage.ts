@@ -1,8 +1,7 @@
 /**
  * Ashid - Basic Usage Examples (TypeScript)
  *
- * Run with: npx ts-node basic-usage.ts
- * Or: npm install && npm run example
+ * Run with: pnpm install && pnpm run example
  */
 
 import { Ashid, ashid, parseAshid, EncoderBase32Crockford } from 'ashid';

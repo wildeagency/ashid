@@ -1,8 +1,10 @@
 /**
  * Ashid - Basic Usage Examples (Kotlin)
  *
- * Run with: kotlinc -cp ashid.jar BasicUsage.kt -include-runtime -d example.jar && java -jar example.jar
- * Or with Gradle: gradle run
+ * Run with:
+ *   ./gradlew build
+ *   kotlinc -cp build/libs/ashid-*.jar examples/BasicUsage.kt -include-runtime -d /tmp/example.jar
+ *   java -jar /tmp/example.jar
  */
 
 package examples
