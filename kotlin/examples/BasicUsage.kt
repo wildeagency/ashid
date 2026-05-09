@@ -24,20 +24,20 @@ fun main() {
     println("Simple ID: $simpleId")
     // Output: 1fvszawr42tve3gxvx9900 (22 chars)
 
-    // With a single-letter prefix (no delimiter)
+    // With a single-letter prefix (underscore delimiter is auto-added)
     val userId = ashid("u")
     println("User ID: $userId")
-    // Output: u1fvszawr42tve3gxvx9900 (23 chars)
+    // Output: u_1fvszawr42tve3gxvx9900 (24 chars)
 
-    // With a multi-letter prefix (no delimiter)
+    // With a multi-letter prefix
     val orderId = ashid("ord")
     println("Order ID: $orderId")
-    // Output: ord1fvszawr42tve3gxvx900 (25 chars)
+    // Output: ord_1fvszawr42tve3gxvx9900 (26 chars)
 
-    // With underscore delimiter (variable length)
+    // Trailing underscore in input is ignored — same result as ashid("product")
     val productId = ashid("product_")
     println("Product ID: $productId")
-    // Output: product_1fvszawr...
+    // Output: product_1fvszawr42tve3gxvx9900 (30 chars)
 
     // ============================================
     // 2. Parsing Ashids

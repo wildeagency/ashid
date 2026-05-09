@@ -24,7 +24,7 @@ A comprehensive comparison of Ashid with popular unique identifier libraries.
 
 ```
 UUID:   550e8400-e29b-41d4-a716-446655440000  (36 chars)
-Ashid:  u1fvszawr42tve3gxvx9900               (23 chars with prefix)
+Ashid:  u_1fvszawr42tve3gxvx9900              (24 chars with prefix)
 ```
 
 #### Where Ashid Wins

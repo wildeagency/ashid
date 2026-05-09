@@ -30,7 +30,7 @@ private const val ASHID4_BASE_LENGTH = 26
  * Examples:
  * - ashid("user") -> "user_1kbg1jmtt4v3x8k9p2m1n" (delimiter auto-added)
  * - ashid("user_") -> "user_1kbg1jmtt4v3x8k9p2m1n" (same result, delimiter ignored)
- * - ashid() -> "0000000001kbg1jmtt4v3x8k9" (no prefix, fixed 22-char base)
+ * - ashid() -> "1kbg1jmtt4v3x8k9p2m1n0" (no prefix, fixed 22-char base)
  *
  * Timestamp Support:
  * - Minimum: 0 (Unix epoch, Jan 1, 1970)

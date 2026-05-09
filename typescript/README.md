@@ -23,9 +23,9 @@ npm install ashid
 ```typescript
 import { ashid } from 'ashid';
 
-const userId = ashid('user_');   // "user_1kbg1jmtt4v3x8k9p2m1n"
-const shortId = ashid('u');      // "u1kbg1jmtt4v3x8k9p2m1n0w"
-const rawId = ashid();           // "1kbg1jmtt4v3x8k9p2m1n0w"
+const userId = ashid('user');    // "user_1kbg1jmtt4v3x8k9p2m1n0" (27 chars)
+const shortId = ashid('u');      // "u_1kbg1jmtt4v3x8k9p2m1n0"    (24 chars)
+const rawId = ashid();           // "1kbg1jmtt4v3x8k9p2m1n0"      (22 chars)
 ```
 
 ## Why ashid?
@@ -62,25 +62,25 @@ ashid embeds a timestamp, so lexicographic sort = chronological sort. Your datab
 
 ## Prefix Formats
 
-ashid supports two formats based on prefix style:
+ashid produces two formats depending on whether you pass a prefix:
 
-### With underscore delimiter (variable length)
+### Without prefix (fixed 22-char base)
 ```typescript
-ashid('user_')   // user_1kbg1jmtt4v3x8k9p2m1n
-ashid('order_')  // order_1kbg1jmts7h2w5r8q4n3m
-```
-- Timestamp: variable length (no padding)
-- Random: 13 chars (padded)
-- Underscore acts as delimiter for reliable parsing
-
-### Without underscore (fixed 22-char base)
-```typescript
-ashid('u')   // u1kbg1jmtt4v3x8k9p2m1n0w (1 + 22 = 23 chars)
-ashid()      // 1kbg1jmtt4v3x8k9p2m1n0w  (22 chars)
+ashid()      // 1kbg1jmtt4v3x8k9p2m1n0  (22 chars)
 ```
 - Timestamp: 9 chars (zero-padded)
 - Random: 13 chars (padded)
-- Fixed length enables parsing without delimiter
+- Fixed 22-char length
+
+### With prefix (variable length)
+```typescript
+ashid('user')    // user_1kbg1jmtt4v3x8k9p2m1n0   (27 chars)
+ashid('u')       // u_1kbg1jmtt4v3x8k9p2m1n0      (24 chars)
+```
+- Underscore delimiter is auto-added; do not include it in the input
+- Timestamp: variable length (unpadded; 9 chars for current-era timestamps)
+- Random: 13 chars (padded)
+- Total length: prefix + 1 (underscore) + timestamp + 13
 
 ## API Reference
 
@@ -91,9 +91,9 @@ Generate a new ID with optional prefix.
 ```typescript
 import { ashid } from 'ashid';
 
-ashid();          // "1kbg1jmtt4v3x8k9p2m1n0w"
-ashid('u');       // "u1kbg1jmtt4v3x8k9p2m1n0w"
-ashid('user_');   // "user_1kbg1jmtt4v3x8k9p2m1n"
+ashid();          // "1kbg1jmtt4v3x8k9p2m1n0"
+ashid('u');       // "u_1kbg1jmtt4v3x8k9p2m1n0"
+ashid('user');    // "user_1kbg1jmtt4v3x8k9p2m1n0"
 ```
 
 ### `Ashid.create(prefix?, time?, randomLong?): string`

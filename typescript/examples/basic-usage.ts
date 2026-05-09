@@ -15,20 +15,20 @@ const simpleId = ashid();
 console.log('Simple ID:', simpleId);
 // Output: 1fvszawr42tve3gxvx9900 (22 chars)
 
-// With a single-letter prefix (no delimiter)
+// With a single-letter prefix (underscore delimiter is auto-added)
 const userId = ashid('u');
 console.log('User ID:', userId);
-// Output: u1fvszawr42tve3gxvx9900 (23 chars)
+// Output: u_1fvszawr42tve3gxvx9900 (24 chars)
 
-// With a multi-letter prefix (no delimiter)
+// With a multi-letter prefix
 const orderId = ashid('ord');
 console.log('Order ID:', orderId);
-// Output: ord1fvszawr42tve3gxvx900 (25 chars)
+// Output: ord_1fvszawr42tve3gxvx9900 (26 chars)
 
-// With underscore delimiter (variable length)
+// Trailing underscore in input is ignored — same result as ashid('product')
 const productId = ashid('product_');
 console.log('Product ID:', productId);
-// Output: product_1fvszawr...
+// Output: product_1fvszawr42tve3gxvx9900 (30 chars)
 
 // ============================================
 // 2. Parsing Ashids

@@ -3,9 +3,9 @@
 **Time-sortable unique identifiers with type prefixes.**
 
 ```python
-ashid("user")  # → "user_1kbg1jmtt4v3x8k9p2m1n"
-ashid("tx")    # → "tx_1kbg1jmts7h2w5r8q4n3m"
-ashid()        # → "0000001kbg1jmtt4v3x8k9p2m1n" (22 chars, fixed width)
+ashid("user")  # → "user_1kbg1jmtt4v3x8k9p2m1n0"
+ashid("tx")    # → "tx_1kbg1jmts7h2w5r8q4n3m0"
+ashid()        # → "1kbg1jmtt4v3x8k9p2m1n0" (22 chars, fixed width)
 ```
 
 Pure Python, stdlib only (`os`, `time`, `re`). Full parity with the [TypeScript](../typescript/) and [Kotlin](../kotlin/) implementations.
@@ -22,9 +22,9 @@ pip install ashid
 from ashid import ashid, ashid4, parse_ashid, Ashid
 
 # Time-sortable IDs with type prefix
-user_id = ashid("user")        # → "user_1kbg1jmtt4v3x8k9p2m1n"
-short_id = ashid("u")          # → "u_1kbg1jmtt4v3x8k9p2m1n"
-raw_id = ashid()               # → "0000001kbg1jmtt4v3x8k9" (22 chars)
+user_id = ashid("user")        # → "user_1kbg1jmtt4v3x8k9p2m1n0"
+short_id = ashid("u")          # → "u_1kbg1jmtt4v3x8k9p2m1n0"
+raw_id = ashid()               # → "1kbg1jmtt4v3x8k9p2m1n0" (22 chars)
 
 # UUID-v4-style (two random components, no timestamp)
 token = ashid4("tok")          # → "tok_x7k9m2p4q8r1s5t3v6w0y1z3"

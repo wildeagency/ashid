@@ -27,20 +27,20 @@ public class BasicUsage {
         System.out.println("Simple ID: " + simpleId);
         // Output: 1fvszawr42tve3gxvx9900 (22 chars)
 
-        // With a single-letter prefix (no delimiter)
+        // With a single-letter prefix (underscore delimiter is auto-added)
         String userId = Ashid.create("u");
         System.out.println("User ID: " + userId);
-        // Output: u1fvszawr42tve3gxvx9900 (23 chars)
+        // Output: u_1fvszawr42tve3gxvx9900 (24 chars)
 
-        // With a multi-letter prefix (no delimiter)
+        // With a multi-letter prefix
         String orderId = Ashid.create("ord");
         System.out.println("Order ID: " + orderId);
-        // Output: ord1fvszawr42tve3gxvx900 (25 chars)
+        // Output: ord_1fvszawr42tve3gxvx9900 (26 chars)
 
-        // With underscore delimiter (variable length)
+        // Trailing underscore in input is ignored — same result as Ashid.create("product")
         String productId = Ashid.create("product_");
         System.out.println("Product ID: " + productId);
-        // Output: product_1fvszawr...
+        // Output: product_1fvszawr42tve3gxvx9900 (30 chars)
 
         // ============================================
         // 2. Parsing Ashids
