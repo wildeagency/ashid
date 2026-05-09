@@ -134,6 +134,20 @@ created_by ashid not null  -- "user_…", "svc_…", "wkr_…" — type is inlin
 
 The same pattern applies to polymorphic foreign keys, generic comment threads, and any other "what kind of thing is this?" column.
 
+### Clean up dirty input
+
+When an ID arrives from outside your system — pasted from an email, transcribed from a screenshot, read aloud over a support call — it may have mixed case, a dash where the underscore should be, or lookalike characters (`O` instead of `0`, `I` instead of `1`, `U` instead of `V`). Pass it through `Ashid.normalize` to get the canonical form back:
+
+```typescript
+Ashid.normalize('USER-1KBG1JMTT4V3X8K9P2M1NO');
+// → "user_1kbg1jmtt4v3x8k9p2m1n0"
+//
+//   USER-  →  user_   (dash normalized to underscore, lowercased)
+//   O      →  0       (Crockford lookalike correction)
+```
+
+Internally `normalize` parses the input, decodes the timestamp and random components to longs, then re-emits them through `create()` — so the result is byte-identical to a freshly-generated ashid for the same underlying values. Throws on input that doesn't parse as an ashid.
+
 ### Round-trip through UUID
 
 Every ashid encodes 128 bits — the same as a UUID — and `Ashid.toUuid` / `Ashid.fromUuid` convert losslessly between the two:
