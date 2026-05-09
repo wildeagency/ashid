@@ -37,7 +37,7 @@ class TestEncode:
         assert len(encoded) > 0
 
     def test_encode_negative_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             EncoderBase32Crockford.encode(-1)
 
 
@@ -77,15 +77,15 @@ class TestDecode:
         assert EncoderBase32Crockford.decode("V") == 27
 
     def test_decode_empty_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             EncoderBase32Crockford.decode("")
 
     def test_decode_invalid_chars_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             EncoderBase32Crockford.decode("abc-def")
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             EncoderBase32Crockford.decode("abc def")
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             EncoderBase32Crockford.decode("abc_def")
 
 
@@ -129,7 +129,7 @@ class TestEncodeBigInt:
         assert encoded == "000000000003v"
 
     def test_encode_negative_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             EncoderBase32Crockford.encode_bigint(-1)
 
 
