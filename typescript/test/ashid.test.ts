@@ -489,4 +489,102 @@ describe('Ashid', () => {
       expect(encoded2.length).toBe(13);
     });
   });
+
+  describe('UUID round-trip', () => {
+    it('toUuid produces a 36-char dashed hex string', () => {
+      const id = Ashid.create('user', 1733140800000, 8234567890123456789n);
+      const uuid = Ashid.toUuid(id);
+      expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(uuid.length).toBe(36);
+    });
+
+    it('toUuid is prefix-agnostic — same UUID regardless of prefix', () => {
+      const ts = 1733140800000;
+      const rand = 8234567890123456789n;
+      const withPrefix = Ashid.create('user', ts, rand);
+      const noPrefix = Ashid.create(undefined, ts, rand);
+      expect(Ashid.toUuid(withPrefix)).toBe(Ashid.toUuid(noPrefix));
+    });
+
+    it('round-trips an Ashid through UUID losslessly (standard form)', () => {
+      const original = Ashid.create('user', 1733140800000, 8234567890123456789n);
+      const uuid = Ashid.toUuid(original);
+      const restored = Ashid.fromUuid(uuid, 'user');
+      expect(restored).toBe(original);
+    });
+
+    it('round-trips an ashid4 through UUID losslessly (long form)', () => {
+      const original = Ashid.create4('tok', 18446744073709551615n, 9223372036854775808n);
+      const uuid = Ashid.toUuid(original);
+      const restored = Ashid.fromUuid(uuid, 'tok');
+      expect(restored).toBe(original);
+    });
+
+    it('round-trips a UUID-1-shaped UUID into a 22-char standard Ashid', () => {
+      // High half within 2^45 → fits standard form
+      const uuid = '00000123-abcd-ef01-2345-6789abcdef01';
+      const id = Ashid.fromUuid(uuid);
+      // No prefix → 22-char base
+      expect(id.length).toBe(22);
+      expect(Ashid.toUuid(id)).toBe(uuid);
+    });
+
+    it('routes UUIDv4 to the 26-char ashid4 form', () => {
+      const uuid = '550e8400-e29b-41d4-a716-446655440000';
+      const id = Ashid.fromUuid(uuid);
+      // No prefix → ashid4 base = 26 chars (since high bits ≫ MAX_TIMESTAMP)
+      expect(id.length).toBe(26);
+      expect(Ashid.toUuid(id)).toBe(uuid);
+    });
+
+    it('routes UUIDv7 to the 26-char ashid4 form', () => {
+      // UUIDv7: version bits at 48-51 force high half above 2^45
+      const uuid = '019e008b-edc4-7265-8312-f6a278b46b11';
+      const id = Ashid.fromUuid(uuid);
+      expect(id.length).toBe(26);
+      expect(Ashid.toUuid(id)).toBe(uuid);
+    });
+
+    it('round-trips the canonical UUIDs from the LinkedIn post', () => {
+      for (const uuid of [
+        '550e8400-e29b-41d4-a716-446655440000',
+        '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+        'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      ]) {
+        expect(Ashid.toUuid(Ashid.fromUuid(uuid))).toBe(uuid);
+      }
+    });
+
+    it('accepts UUID without dashes (32-char hex)', () => {
+      const dashed = '550e8400-e29b-41d4-a716-446655440000';
+      const undashed = '550e8400e29b41d4a716446655440000';
+      expect(Ashid.fromUuid(dashed)).toBe(Ashid.fromUuid(undashed));
+    });
+
+    it('preserves prefix through fromUuid', () => {
+      const id = Ashid.fromUuid('550e8400-e29b-41d4-a716-446655440000', 'user');
+      expect(id).toMatch(/^user_/);
+      // toUuid strips prefix; round-trip via passing prefix back
+      expect(Ashid.fromUuid(Ashid.toUuid(id), 'user')).toBe(id);
+    });
+
+    it('handles all-zero UUID', () => {
+      const uuid = '00000000-0000-0000-0000-000000000000';
+      const id = Ashid.fromUuid(uuid);
+      expect(Ashid.toUuid(id)).toBe(uuid);
+    });
+
+    it('handles all-FF (max) UUID', () => {
+      const uuid = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+      const id = Ashid.fromUuid(uuid);
+      expect(id.length).toBe(26); // long form (high > MAX_TIMESTAMP)
+      expect(Ashid.toUuid(id)).toBe(uuid);
+    });
+
+    it('throws on invalid UUID input', () => {
+      expect(() => Ashid.fromUuid('not-a-uuid')).toThrow(/Invalid UUID/);
+      expect(() => Ashid.fromUuid('550e8400e29b41d4a71644665544000')).toThrow(/Invalid UUID/); // 31 hex chars
+      expect(() => Ashid.fromUuid('550e8400-e29b-41d4-a716-44665544000g')).toThrow(/Invalid UUID/); // non-hex
+    });
+  });
 });

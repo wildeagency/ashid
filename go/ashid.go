@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -162,6 +163,13 @@ func Parse(id string) (prefix, encodedTimestamp, encodedRandom string, err error
 		}
 	}
 
+	// If no delimiter was found, the whole string is the base — even if it
+	// happens to be all-alpha (e.g. an ashid4 whose random component encodes
+	// to letters only).
+	if !hasDelimiter {
+		prefixLength = 0
+	}
+
 	if hasDelimiter {
 		raw := id[:prefixLength]
 		if strings.HasSuffix(raw, "-") {
@@ -245,6 +253,78 @@ func IsValid(id string) bool {
 		return false
 	}
 	return true
+}
+
+// ToUuid converts an Ashid to its UUID-shaped representation.
+//
+// An Ashid encodes 128 bits of information (a 64-bit timestamp or first random
+// component plus a 64-bit random component); this method emits those 128 bits
+// as a standard 36-character UUID string with dashes (8-4-4-4-12).
+//
+// Round-trips losslessly with FromUuid. The resulting UUID is shape-compatible
+// with RFC 4122 but the version/variant bits reflect the underlying Ashid bytes,
+// not RFC 4122 conventions, unless the Ashid was originally created from a
+// v1/v4/v7 UUID.
+func ToUuid(id string) (string, error) {
+	_, ts, r, err := Parse(id)
+	if err != nil {
+		return "", err
+	}
+	high, err := Decode(ts)
+	if err != nil {
+		return "", err
+	}
+	low, err := Decode(r)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		"%08x-%04x-%04x-%04x-%012x",
+		uint32(high>>32),
+		uint16((high>>16)&0xffff),
+		uint16(high&0xffff),
+		uint16(low>>48),
+		low&0xffff_ffff_ffff,
+	), nil
+}
+
+// FromUuid converts a UUID string (36-char dashed or 32-char hex) into an Ashid.
+//
+// Splits the 128-bit UUID into two 64-bit halves: the high half becomes the
+// timestamp (or first random component, see below) and the low half becomes
+// the random component.
+//
+//   - If the high half fits in 45 bits (<= MaxTimestamp), the result is a
+//     standard 22-char Ashid base.
+//   - Otherwise — for UUIDv4 (random) and UUIDv7 (whose version bits force the
+//     high half above 2^45) — the result is a 26-char ashid4 base.
+//
+// Round-trip through ToUuid is byte-identical in both cases. Pass an empty
+// prefix to omit the type prefix.
+func FromUuid(uuid, prefix string) (string, error) {
+	hex := strings.ToLower(strings.ReplaceAll(uuid, "-", ""))
+	if len(hex) != 32 {
+		return "", fmt.Errorf("invalid UUID: must be 32 or 36 hex characters (got %q)", uuid)
+	}
+	for i := 0; i < len(hex); i++ {
+		c := hex[i]
+		ok := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+		if !ok {
+			return "", fmt.Errorf("invalid UUID: must be 32 or 36 hex characters (got %q)", uuid)
+		}
+	}
+	high, err := strconv.ParseUint(hex[:16], 16, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid UUID: %w", err)
+	}
+	low, err := strconv.ParseUint(hex[16:32], 16, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid UUID: %w", err)
+	}
+	if int64(high) >= 0 && int64(high) <= MaxTimestamp {
+		return Create(prefix, int64(high), low)
+	}
+	return Create4(prefix, high, low)
 }
 
 // Normalize lowercases the prefix and re-encodes the ID through canonical form,

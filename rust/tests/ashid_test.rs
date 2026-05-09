@@ -570,3 +570,126 @@ fn error_invalid_char_for_bad_decode() {
         other => panic!("expected InvalidChar, got {:?}", other),
     }
 }
+
+// ---------- UUID round-trip ----------
+
+#[test]
+fn to_uuid_format() {
+    let id = Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
+    let uuid = Ashid::to_uuid(&id).unwrap();
+    assert_eq!(uuid.len(), 36);
+    let parts: Vec<&str> = uuid.split('-').collect();
+    assert_eq!(parts.len(), 5);
+    assert_eq!(
+        parts.iter().map(|p| p.len()).collect::<Vec<_>>(),
+        vec![8, 4, 4, 4, 12]
+    );
+    assert!(uuid.chars().all(|c| c == '-' || c.is_ascii_hexdigit()));
+}
+
+#[test]
+fn to_uuid_is_prefix_agnostic() {
+    let with_prefix = Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
+    let no_prefix = Ashid::create(None, Some(1733140800000), Some(8234567890123456789)).unwrap();
+    assert_eq!(Ashid::to_uuid(&with_prefix).unwrap(), Ashid::to_uuid(&no_prefix).unwrap());
+}
+
+#[test]
+fn roundtrip_standard_form_through_uuid() {
+    let original = Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
+    let uuid = Ashid::to_uuid(&original).unwrap();
+    let restored = Ashid::from_uuid(&uuid, Some("user")).unwrap();
+    assert_eq!(original, restored);
+}
+
+#[test]
+fn roundtrip_long_form_through_uuid() {
+    let original = Ashid::create4(Some("tok"), Some(u64::MAX), Some(1u64 << 63)).unwrap();
+    let uuid = Ashid::to_uuid(&original).unwrap();
+    let restored = Ashid::from_uuid(&uuid, Some("tok")).unwrap();
+    assert_eq!(original, restored);
+}
+
+#[test]
+fn uuid1_shaped_routes_to_22_char() {
+    let uuid = "00000123-abcd-ef01-2345-6789abcdef01";
+    let id = Ashid::from_uuid(uuid, None).unwrap();
+    assert_eq!(id.len(), 22);
+    assert_eq!(Ashid::to_uuid(&id).unwrap(), uuid);
+}
+
+#[test]
+fn uuidv4_routes_to_26_char() {
+    let uuid = "550e8400-e29b-41d4-a716-446655440000";
+    let id = Ashid::from_uuid(uuid, None).unwrap();
+    assert_eq!(id.len(), 26);
+    assert_eq!(Ashid::to_uuid(&id).unwrap(), uuid);
+}
+
+#[test]
+fn uuidv7_routes_to_26_char() {
+    let uuid = "019e008b-edc4-7265-8312-f6a278b46b11";
+    let id = Ashid::from_uuid(uuid, None).unwrap();
+    assert_eq!(id.len(), 26);
+    assert_eq!(Ashid::to_uuid(&id).unwrap(), uuid);
+}
+
+#[test]
+fn roundtrips_canonical_uuids_from_post() {
+    for uuid in [
+        "550e8400-e29b-41d4-a716-446655440000",
+        "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    ] {
+        let id = Ashid::from_uuid(uuid, None).unwrap();
+        assert_eq!(Ashid::to_uuid(&id).unwrap(), uuid);
+    }
+}
+
+#[test]
+fn accepts_undashed_input() {
+    let dashed = "550e8400-e29b-41d4-a716-446655440000";
+    let undashed = "550e8400e29b41d4a716446655440000";
+    assert_eq!(
+        Ashid::from_uuid(dashed, None).unwrap(),
+        Ashid::from_uuid(undashed, None).unwrap()
+    );
+}
+
+#[test]
+fn preserves_prefix_through_from_uuid() {
+    let id = Ashid::from_uuid("550e8400-e29b-41d4-a716-446655440000", Some("user")).unwrap();
+    assert!(id.starts_with("user_"));
+    let uuid = Ashid::to_uuid(&id).unwrap();
+    assert_eq!(Ashid::from_uuid(&uuid, Some("user")).unwrap(), id);
+}
+
+#[test]
+fn handles_all_zero_uuid() {
+    let uuid = "00000000-0000-0000-0000-000000000000";
+    let id = Ashid::from_uuid(uuid, None).unwrap();
+    assert_eq!(Ashid::to_uuid(&id).unwrap(), uuid);
+}
+
+#[test]
+fn handles_all_ff_uuid() {
+    let uuid = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+    let id = Ashid::from_uuid(uuid, None).unwrap();
+    assert_eq!(id.len(), 26);
+    assert_eq!(Ashid::to_uuid(&id).unwrap(), uuid);
+}
+
+#[test]
+fn invalid_uuid_returns_error() {
+    use ashid::AshidError;
+    for bad in [
+        "not-a-uuid",
+        "550e8400e29b41d4a71644665544000",
+        "550e8400-e29b-41d4-a716-44665544000g",
+    ] {
+        match Ashid::from_uuid(bad, None) {
+            Err(AshidError::InvalidUuid(_)) => {}
+            other => panic!("expected InvalidUuid for {:?}, got {:?}", bad, other),
+        }
+    }
+}

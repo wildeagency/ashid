@@ -821,3 +821,183 @@ func TestRandom_ReturnsBigInt(t *testing.T) {
 		t.Errorf("Random = %s, want 12345", got)
 	}
 }
+
+// ---- UUID round-trip ----
+
+func TestToUuid_Format(t *testing.T) {
+	id := mustCreate(t, "user", 1733140800000, 8234567890123456789)
+	uuid, err := ToUuid(id)
+	if err != nil {
+		t.Fatalf("ToUuid: %v", err)
+	}
+	if len(uuid) != 36 {
+		t.Errorf("expected 36 chars, got %d (%q)", len(uuid), uuid)
+	}
+	matched, _ := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, uuid)
+	if !matched {
+		t.Errorf("uuid not in canonical 8-4-4-4-12 form: %q", uuid)
+	}
+}
+
+func TestToUuid_PrefixAgnostic(t *testing.T) {
+	withPrefix := mustCreate(t, "user", 1733140800000, 8234567890123456789)
+	noPrefix := mustCreate(t, "", 1733140800000, 8234567890123456789)
+	a, _ := ToUuid(withPrefix)
+	b, _ := ToUuid(noPrefix)
+	if a != b {
+		t.Errorf("toUuid not prefix-agnostic: %q vs %q", a, b)
+	}
+}
+
+func TestRoundtrip_StandardForm(t *testing.T) {
+	original := mustCreate(t, "user", 1733140800000, 8234567890123456789)
+	uuid, _ := ToUuid(original)
+	restored, err := FromUuid(uuid, "user")
+	if err != nil {
+		t.Fatalf("FromUuid: %v", err)
+	}
+	if restored != original {
+		t.Errorf("roundtrip mismatch: %q -> %q -> %q", original, uuid, restored)
+	}
+}
+
+func TestRoundtrip_LongForm(t *testing.T) {
+	original, err := Create4("tok", ^uint64(0), 1<<63)
+	if err != nil {
+		t.Fatalf("Create4: %v", err)
+	}
+	uuid, _ := ToUuid(original)
+	restored, err := FromUuid(uuid, "tok")
+	if err != nil {
+		t.Fatalf("FromUuid: %v", err)
+	}
+	if restored != original {
+		t.Errorf("ashid4 roundtrip mismatch: %q -> %q -> %q", original, uuid, restored)
+	}
+}
+
+func TestUuid1Shaped_RoutesTo22Char(t *testing.T) {
+	uuid := "00000123-abcd-ef01-2345-6789abcdef01"
+	id, err := FromUuid(uuid, "")
+	if err != nil {
+		t.Fatalf("FromUuid: %v", err)
+	}
+	if len(id) != 22 {
+		t.Errorf("expected 22-char id, got %d (%q)", len(id), id)
+	}
+	got, _ := ToUuid(id)
+	if got != uuid {
+		t.Errorf("roundtrip: %q -> %q", uuid, got)
+	}
+}
+
+func TestUuidV4_RoutesTo26Char(t *testing.T) {
+	uuid := "550e8400-e29b-41d4-a716-446655440000"
+	id, err := FromUuid(uuid, "")
+	if err != nil {
+		t.Fatalf("FromUuid: %v", err)
+	}
+	if len(id) != 26 {
+		t.Errorf("expected 26-char id, got %d (%q)", len(id), id)
+	}
+	got, _ := ToUuid(id)
+	if got != uuid {
+		t.Errorf("roundtrip: %q -> %q", uuid, got)
+	}
+}
+
+func TestUuidV7_RoutesTo26Char(t *testing.T) {
+	uuid := "019e008b-edc4-7265-8312-f6a278b46b11"
+	id, err := FromUuid(uuid, "")
+	if err != nil {
+		t.Fatalf("FromUuid: %v", err)
+	}
+	if len(id) != 26 {
+		t.Errorf("expected 26-char id, got %d (%q)", len(id), id)
+	}
+	got, _ := ToUuid(id)
+	if got != uuid {
+		t.Errorf("roundtrip: %q -> %q", uuid, got)
+	}
+}
+
+func TestRoundtrip_CanonicalUuidsFromPost(t *testing.T) {
+	for _, uuid := range []string{
+		"550e8400-e29b-41d4-a716-446655440000",
+		"7c9e6679-7425-40de-944b-e07fc1f90ae7",
+		"f47ac10b-58cc-4372-a567-0e02b2c3d479",
+	} {
+		id, err := FromUuid(uuid, "")
+		if err != nil {
+			t.Fatalf("FromUuid(%q): %v", uuid, err)
+		}
+		got, _ := ToUuid(id)
+		if got != uuid {
+			t.Errorf("roundtrip %q -> %q", uuid, got)
+		}
+	}
+}
+
+func TestFromUuid_AcceptsUndashed(t *testing.T) {
+	dashed := "550e8400-e29b-41d4-a716-446655440000"
+	undashed := "550e8400e29b41d4a716446655440000"
+	a, _ := FromUuid(dashed, "")
+	b, _ := FromUuid(undashed, "")
+	if a != b {
+		t.Errorf("dashed/undashed mismatch: %q vs %q", a, b)
+	}
+}
+
+func TestFromUuid_PreservesPrefix(t *testing.T) {
+	id, err := FromUuid("550e8400-e29b-41d4-a716-446655440000", "user")
+	if err != nil {
+		t.Fatalf("FromUuid: %v", err)
+	}
+	if !strings.HasPrefix(id, "user_") {
+		t.Errorf("expected user_ prefix, got %q", id)
+	}
+	uuid, _ := ToUuid(id)
+	restored, _ := FromUuid(uuid, "user")
+	if restored != id {
+		t.Errorf("prefix-roundtrip mismatch: %q -> %q -> %q", id, uuid, restored)
+	}
+}
+
+func TestFromUuid_AllZero(t *testing.T) {
+	uuid := "00000000-0000-0000-0000-000000000000"
+	id, err := FromUuid(uuid, "")
+	if err != nil {
+		t.Fatalf("FromUuid: %v", err)
+	}
+	got, _ := ToUuid(id)
+	if got != uuid {
+		t.Errorf("zero-roundtrip: %q", got)
+	}
+}
+
+func TestFromUuid_AllFF(t *testing.T) {
+	uuid := "ffffffff-ffff-ffff-ffff-ffffffffffff"
+	id, err := FromUuid(uuid, "")
+	if err != nil {
+		t.Fatalf("FromUuid: %v", err)
+	}
+	if len(id) != 26 {
+		t.Errorf("expected 26-char id, got %d (%q)", len(id), id)
+	}
+	got, _ := ToUuid(id)
+	if got != uuid {
+		t.Errorf("ff-roundtrip: %q", got)
+	}
+}
+
+func TestFromUuid_InvalidInput(t *testing.T) {
+	for _, bad := range []string{
+		"not-a-uuid",
+		"550e8400e29b41d4a71644665544000",
+		"550e8400-e29b-41d4-a716-44665544000g",
+	} {
+		if _, err := FromUuid(bad, ""); err == nil {
+			t.Errorf("expected error for %q", bad)
+		}
+	}
+}

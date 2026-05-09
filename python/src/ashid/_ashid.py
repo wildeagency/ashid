@@ -129,6 +129,12 @@ class Ashid:
                 prefix_length = 0
                 break
 
+        # If no delimiter was found, the whole string is the base — even if it
+        # happens to be all-alpha (e.g. an ashid4 whose random component encodes
+        # to letters only).
+        if not has_delimiter:
+            prefix_length = 0
+
         if has_delimiter:
             raw_prefix = id[:prefix_length]
             if raw_prefix.endswith("-"):
@@ -203,6 +209,50 @@ class Ashid:
         random = EncoderBase32Crockford.decode(encoded_random)
         normalized_prefix = prefix.lower() if prefix else None
         return Ashid.create(normalized_prefix, timestamp, random)
+
+    @staticmethod
+    def to_uuid(id: str) -> str:
+        """Convert an Ashid to its UUID-shaped representation.
+
+        An Ashid encodes 128 bits of information (a 64-bit timestamp or first random
+        component plus a 64-bit random component); this method emits those 128 bits
+        as a standard 36-character UUID string with dashes (8-4-4-4-12).
+
+        Round-trips losslessly with Ashid.from_uuid. The resulting UUID is shape-
+        compatible with RFC 4122 but the version/variant bits reflect the underlying
+        Ashid bytes, not RFC 4122 conventions, unless the Ashid was originally
+        created from a v1/v4/v7 UUID.
+        """
+        _, encoded_timestamp, encoded_random = Ashid.parse(id)
+        high = EncoderBase32Crockford.decode(encoded_timestamp)
+        low = EncoderBase32Crockford.decode(encoded_random)
+        high_hex = f"{high:016x}"
+        low_hex = f"{low:016x}"
+        return f"{high_hex[:8]}-{high_hex[8:12]}-{high_hex[12:16]}-{low_hex[:4]}-{low_hex[4:16]}"
+
+    @staticmethod
+    def from_uuid(uuid: str, prefix: Optional[str] = None) -> str:
+        """Convert a UUID into an Ashid.
+
+        Splits the 128-bit UUID into two 64-bit halves: the high half becomes the
+        timestamp (or first random component, see below) and the low half becomes
+        the random component.
+
+        - If the high half fits in 45 bits (<= MAX_TIMESTAMP), the result is a
+          standard 22-char Ashid base.
+        - Otherwise -- for UUIDv4 (random) and UUIDv7 (whose version bits force
+          the high half above 2^45) -- the result is a 26-char ashid4 base.
+
+        Round-trip through Ashid.to_uuid is byte-identical in both cases.
+        """
+        hex_str = uuid.replace("-", "").lower()
+        if len(hex_str) != 32 or any(c not in "0123456789abcdef" for c in hex_str):
+            raise ValueError(f'Invalid UUID: must be 32 or 36 hex characters (got "{uuid}")')
+        high = int(hex_str[:16], 16)
+        low = int(hex_str[16:32], 16)
+        if high <= _MAX_TIMESTAMP:
+            return Ashid.create(prefix, high, low)
+        return Ashid.create4(prefix, high, low)
 
 
 def ashid(prefix: Optional[str] = None) -> str:

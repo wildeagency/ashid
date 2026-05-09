@@ -137,6 +137,11 @@ export class Ashid {
       }
     }
 
+    // If we never found a delimiter, the whole string is the base — even if it
+    // happens to be all-alpha (e.g., an ashid4 whose random component encodes
+    // to letters only).
+    if (!hasDelimiter) prefixLength = 0;
+
     // Normalize dash to underscore in prefix
     const prefix = hasDelimiter ? id.substring(0, prefixLength).replace(/-$/, '_') : '';
     const baseId = id.substring(prefixLength);
@@ -283,6 +288,64 @@ export class Ashid {
     const baseId = encoded1 + encoded2;
 
     return (normalizedPrefix || '') + baseId;
+  }
+
+  /**
+   * Convert an Ashid to its UUID-shaped representation.
+   *
+   * An Ashid encodes the same 128 bits of information as a UUID — a millisecond
+   * timestamp (or first random component, in the ashid4 form) in the high 64 bits
+   * and a 64-bit random value in the low 64 bits. This method emits those 128 bits
+   * as a standard 36-character UUID string with dashes (8-4-4-4-12).
+   *
+   * Round-trips losslessly with Ashid.fromUuid. The resulting UUID is shape-
+   * compatible with RFC 4122 but the version/variant bits reflect the underlying
+   * Ashid bytes, not RFC 4122 conventions, unless the Ashid was originally
+   * created from a v1/v4/v7 UUID.
+   *
+   * @param id Ashid string to convert
+   * @returns 36-character UUID string with dashes
+   */
+  static toUuid(id: string): string {
+    const [, encodedTimestamp, encodedRandom] = this.parse(id);
+    const high = EncoderBase32Crockford.decodeBigInt(encodedTimestamp);
+    const low = EncoderBase32Crockford.decodeBigInt(encodedRandom);
+    const highHex = high.toString(16).padStart(16, '0');
+    const lowHex = low.toString(16).padStart(16, '0');
+    return `${highHex.slice(0, 8)}-${highHex.slice(8, 12)}-${highHex.slice(12, 16)}-${lowHex.slice(0, 4)}-${lowHex.slice(4, 16)}`;
+  }
+
+  /**
+   * Convert a UUID into an Ashid.
+   *
+   * Splits the 128-bit UUID into two 64-bit halves: the high half becomes the
+   * timestamp (or first random component, see below) and the low half becomes
+   * the random component.
+   *
+   * - If the high half fits in 45 bits (≤ MAX_TIMESTAMP), the result is a
+   *   standard 22-char Ashid base (9 char timestamp + 13 char random).
+   * - Otherwise — for UUIDv4 (random) and UUIDv7 (whose version bits at position
+   *   48-51 force the high half above 2^45) — the result is a 26-char ashid4
+   *   base (13 + 13).
+   *
+   * Round-trip through Ashid.toUuid is byte-identical in both cases.
+   *
+   * @param uuid 36-char UUID with dashes, or 32-char hex without dashes
+   * @param prefix Optional type prefix to attach
+   * @returns Ashid string
+   * @throws Error if uuid is not 32 or 36 hex characters
+   */
+  static fromUuid(uuid: string, prefix?: string): string {
+    const hex = uuid.replace(/-/g, '');
+    if (!/^[0-9a-fA-F]{32}$/.test(hex)) {
+      throw new Error(`Invalid UUID: must be 32 or 36 hex characters (got "${uuid}")`);
+    }
+    const high = BigInt('0x' + hex.slice(0, 16));
+    const low = BigInt('0x' + hex.slice(16, 32));
+    if (high <= BigInt(MAX_TIMESTAMP)) {
+      return this.create(prefix, Number(high), low);
+    }
+    return this.create4(prefix, high, low);
   }
 
 }

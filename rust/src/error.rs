@@ -11,6 +11,8 @@ pub enum AshidError {
     InvalidId(InvalidIdReason),
     /// Base32 decoder hit a character outside the Crockford alphabet.
     InvalidChar(char),
+    /// `from_uuid` received a string that is not 32 or 36 hex characters.
+    InvalidUuid(String),
 }
 
 /// Specific structural failure encountered while parsing an Ashid.
@@ -43,6 +45,9 @@ impl fmt::Display for AshidError {
             },
             AshidError::InvalidChar(ch) => {
                 write!(f, "invalid character in Base32 string: '{}'", ch)
+            }
+            AshidError::InvalidUuid(s) => {
+                write!(f, "invalid UUID: must be 32 or 36 hex characters (got \"{}\")", s)
             }
         }
     }

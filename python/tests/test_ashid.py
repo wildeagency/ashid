@@ -1,5 +1,6 @@
 """Tests for Ashid."""
 
+import re
 import time
 
 import pytest
@@ -415,3 +416,76 @@ class TestAshid4:
             Ashid.create4("tok", -1, 100)
         with pytest.raises(ValueError, match="non-negative"):
             Ashid.create4("tok", 100, -1)
+
+
+class TestUuidRoundTrip:
+    def test_to_uuid_format(self):
+        id = Ashid.create("user", 1733140800000, 8234567890123456789)
+        uuid = Ashid.to_uuid(id)
+        assert len(uuid) == 36
+        assert re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", uuid)
+
+    def test_to_uuid_prefix_agnostic(self):
+        ts, rand = 1733140800000, 8234567890123456789
+        with_prefix = Ashid.create("user", ts, rand)
+        no_prefix = Ashid.create(None, ts, rand)
+        assert Ashid.to_uuid(with_prefix) == Ashid.to_uuid(no_prefix)
+
+    def test_roundtrip_standard_form(self):
+        original = Ashid.create("user", 1733140800000, 8234567890123456789)
+        assert Ashid.from_uuid(Ashid.to_uuid(original), "user") == original
+
+    def test_roundtrip_long_form(self):
+        original = Ashid.create4("tok", (1 << 64) - 1, 1 << 63)
+        assert Ashid.from_uuid(Ashid.to_uuid(original), "tok") == original
+
+    def test_uuid1_shaped_routes_to_22_char(self):
+        uuid = "00000123-abcd-ef01-2345-6789abcdef01"
+        id = Ashid.from_uuid(uuid)
+        assert len(id) == 22
+        assert Ashid.to_uuid(id) == uuid
+
+    def test_uuid4_routes_to_26_char(self):
+        uuid = "550e8400-e29b-41d4-a716-446655440000"
+        id = Ashid.from_uuid(uuid)
+        assert len(id) == 26
+        assert Ashid.to_uuid(id) == uuid
+
+    def test_uuid7_routes_to_26_char(self):
+        uuid = "019e008b-edc4-7265-8312-f6a278b46b11"
+        id = Ashid.from_uuid(uuid)
+        assert len(id) == 26
+        assert Ashid.to_uuid(id) == uuid
+
+    def test_canonical_uuids_from_post(self):
+        for uuid in [
+            "550e8400-e29b-41d4-a716-446655440000",
+            "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+        ]:
+            assert Ashid.to_uuid(Ashid.from_uuid(uuid)) == uuid
+
+    def test_undashed_input_accepted(self):
+        dashed = "550e8400-e29b-41d4-a716-446655440000"
+        undashed = "550e8400e29b41d4a716446655440000"
+        assert Ashid.from_uuid(dashed) == Ashid.from_uuid(undashed)
+
+    def test_prefix_preserved_through_from_uuid(self):
+        id = Ashid.from_uuid("550e8400-e29b-41d4-a716-446655440000", "user")
+        assert id.startswith("user_")
+        assert Ashid.from_uuid(Ashid.to_uuid(id), "user") == id
+
+    def test_all_zero_uuid(self):
+        uuid = "00000000-0000-0000-0000-000000000000"
+        assert Ashid.to_uuid(Ashid.from_uuid(uuid)) == uuid
+
+    def test_all_ff_uuid(self):
+        uuid = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        id = Ashid.from_uuid(uuid)
+        assert len(id) == 26
+        assert Ashid.to_uuid(id) == uuid
+
+    def test_invalid_uuid_raises(self):
+        for bad in ["not-a-uuid", "550e8400e29b41d4a71644665544000", "550e8400-e29b-41d4-a716-44665544000g"]:
+            with pytest.raises(ValueError, match="Invalid UUID"):
+                Ashid.from_uuid(bad)

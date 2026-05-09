@@ -117,6 +117,13 @@ impl Ashid {
             }
         }
 
+        // If no delimiter was found, the whole string is the base — even if it
+        // happens to be all-alpha (e.g. an ashid4 whose random component encodes
+        // to letters only).
+        if !has_delimiter {
+            prefix_length = 0;
+        }
+
         let prefix = if has_delimiter {
             let raw = &id[..prefix_length];
             match raw.strip_suffix('-') {
@@ -184,6 +191,63 @@ impl Ashid {
             return false;
         }
         EncoderBase32Crockford::decode(&ts).is_ok() && EncoderBase32Crockford::decode(&rand).is_ok()
+    }
+
+    /// Convert an Ashid to its UUID-shaped representation.
+    ///
+    /// An Ashid encodes 128 bits of information (a 64-bit timestamp or first
+    /// random component plus a 64-bit random component); this method emits those
+    /// 128 bits as a standard 36-character UUID string with dashes (8-4-4-4-12).
+    ///
+    /// Round-trips losslessly with [`Ashid::from_uuid`]. The resulting UUID is
+    /// shape-compatible with RFC 4122 but the version/variant bits reflect the
+    /// underlying Ashid bytes, not RFC 4122 conventions, unless the Ashid was
+    /// originally created from a v1/v4/v7 UUID.
+    pub fn to_uuid(id: &str) -> Result<String, AshidError> {
+        let (_, ts, rand) = Self::parse(id)?;
+        let high = EncoderBase32Crockford::decode(&ts)?;
+        let low = EncoderBase32Crockford::decode(&rand)?;
+        Ok(format!(
+            "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+            (high >> 32) as u32,
+            ((high >> 16) & 0xffff) as u16,
+            (high & 0xffff) as u16,
+            (low >> 48) as u16,
+            low & 0xffff_ffff_ffff,
+        ))
+    }
+
+    /// Convert a UUID string into an Ashid.
+    ///
+    /// Splits the 128-bit UUID into two 64-bit halves: the high half becomes the
+    /// timestamp (or first random component, see below) and the low half becomes
+    /// the random component.
+    ///
+    /// - If the high half fits in 45 bits (≤ `MAX_TIMESTAMP`), the result is a
+    ///   standard 22-char Ashid base.
+    /// - Otherwise — for UUIDv4 (random) and UUIDv7 (whose version bits force
+    ///   the high half above 2^45) — the result is a 26-char ashid4 base.
+    ///
+    /// Round-trip through [`Ashid::to_uuid`] is byte-identical in both cases.
+    pub fn from_uuid(uuid: &str, prefix: Option<&str>) -> Result<String, AshidError> {
+        let hex: String = uuid
+            .chars()
+            .filter(|c| *c != '-')
+            .flat_map(|c| c.to_lowercase())
+            .collect();
+        if hex.len() != 32 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(AshidError::InvalidUuid(uuid.to_string()));
+        }
+        let high = u64::from_str_radix(&hex[..16], 16)
+            .map_err(|_| AshidError::InvalidUuid(uuid.to_string()))?;
+        let low = u64::from_str_radix(&hex[16..32], 16)
+            .map_err(|_| AshidError::InvalidUuid(uuid.to_string()))?;
+
+        if high <= MAX_TIMESTAMP {
+            Self::create(prefix, Some(high), Some(low))
+        } else {
+            Self::create4(prefix, Some(high), Some(low))
+        }
     }
 
     /// Normalize an Ashid: lowercase the prefix, canonicalize lookalike chars

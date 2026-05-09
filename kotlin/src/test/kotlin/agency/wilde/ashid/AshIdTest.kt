@@ -3,6 +3,7 @@ package agency.wilde.ashid
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -531,6 +532,106 @@ class AshidTest {
 
         assertEquals(random1, decoded1)
         assertEquals(random2, decoded2)
+    }
+
+    // --- UUID round-trip ---
+
+    @Test
+    fun `toUuid produces a 36-char uuid`() {
+        val id = Ashid.create("user", 1733140800000L, 8234567890123456789L)
+        assertEquals(36, Ashid.toUuid(id).toString().length)
+    }
+
+    @Test
+    fun `toUuid is prefix-agnostic`() {
+        val ts = 1733140800000L
+        val rand = 8234567890123456789L
+        assertEquals(
+            Ashid.toUuid(Ashid.create("user", ts, rand)),
+            Ashid.toUuid(Ashid.create(null, ts, rand))
+        )
+    }
+
+    @Test
+    fun `roundtrips a standard-form Ashid through UUID`() {
+        val original = Ashid.create("user", 1733140800000L, 8234567890123456789L)
+        assertEquals(original, Ashid.fromUuid(Ashid.toUuid(original), "user"))
+    }
+
+    @Test
+    fun `roundtrips an ashid4 through UUID`() {
+        val original = Ashid.create4("tok", ULong.MAX_VALUE, 1UL shl 63)
+        assertEquals(original, Ashid.fromUuid(Ashid.toUuid(original), "tok"))
+    }
+
+    @Test
+    fun `UUID-1-shaped UUID routes to 22-char Ashid`() {
+        val uuid = "00000123-abcd-ef01-2345-6789abcdef01"
+        val id = Ashid.fromUuid(uuid)
+        assertEquals(22, id.length)
+        assertEquals(uuid, Ashid.toUuid(id).toString())
+    }
+
+    @Test
+    fun `UUIDv4 routes to 26-char ashid4`() {
+        val uuid = "550e8400-e29b-41d4-a716-446655440000"
+        val id = Ashid.fromUuid(uuid)
+        assertEquals(26, id.length)
+        assertEquals(uuid, Ashid.toUuid(id).toString())
+    }
+
+    @Test
+    fun `UUIDv7 routes to 26-char ashid4`() {
+        val uuid = "019e008b-edc4-7265-8312-f6a278b46b11"
+        val id = Ashid.fromUuid(uuid)
+        assertEquals(26, id.length)
+        assertEquals(uuid, Ashid.toUuid(id).toString())
+    }
+
+    @Test
+    fun `roundtrips canonical UUIDs from the post`() {
+        listOf(
+            "550e8400-e29b-41d4-a716-446655440000",
+            "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        ).forEach { uuid ->
+            assertEquals(uuid, Ashid.toUuid(Ashid.fromUuid(uuid)).toString())
+        }
+    }
+
+    @Test
+    fun `accepts undashed 32-char hex input`() {
+        val dashed = "550e8400-e29b-41d4-a716-446655440000"
+        val undashed = "550e8400e29b41d4a716446655440000"
+        assertEquals(Ashid.fromUuid(dashed), Ashid.fromUuid(undashed))
+    }
+
+    @Test
+    fun `preserves prefix through fromUuid`() {
+        val id = Ashid.fromUuid("550e8400-e29b-41d4-a716-446655440000", "user")
+        assertTrue(id.startsWith("user_"))
+        assertEquals(id, Ashid.fromUuid(Ashid.toUuid(id), "user"))
+    }
+
+    @Test
+    fun `handles all-zero UUID`() {
+        val uuid = "00000000-0000-0000-0000-000000000000"
+        assertEquals(uuid, Ashid.toUuid(Ashid.fromUuid(uuid)).toString())
+    }
+
+    @Test
+    fun `handles all-FF UUID`() {
+        val uuid = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        val id = Ashid.fromUuid(uuid)
+        assertEquals(26, id.length)
+        assertEquals(uuid, Ashid.toUuid(id).toString())
+    }
+
+    @Test
+    fun `throws on invalid UUID input`() {
+        assertFailsWith<IllegalArgumentException> { Ashid.fromUuid("not-a-uuid") }
+        assertFailsWith<IllegalArgumentException> { Ashid.fromUuid("550e8400e29b41d4a71644665544000") }
+        assertFailsWith<IllegalArgumentException> { Ashid.fromUuid("550e8400-e29b-41d4-a716-44665544000g") }
     }
 
 }

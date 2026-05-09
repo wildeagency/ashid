@@ -130,6 +130,11 @@ object Ashid {
             }
         }
 
+        // If no delimiter was found, the whole string is the base — even if it
+        // happens to be all-alpha (e.g. an ashid4 whose random component encodes
+        // to letters only).
+        if (!hasDelimiter) prefixLength = 0
+
         // Normalize dash to underscore in prefix
         val prefix = if (hasDelimiter) id.substring(0, prefixLength).replace(Regex("-$"), "_") else ""
         val baseId = id.substring(prefixLength)
@@ -265,6 +270,90 @@ object Ashid {
     ): String {
         require(random1 >= 0 && random2 >= 0) { "Ashid random values must be non-negative" }
         return create4(prefix, random1.toULong(), random2.toULong())
+    }
+
+    /**
+     * Convert an Ashid to its UUID-shaped representation.
+     *
+     * An Ashid encodes 128 bits of information (a 64-bit timestamp or first random
+     * component plus a 64-bit random component); this method emits those 128 bits
+     * as a [java.util.UUID].
+     *
+     * Round-trips losslessly with [fromUuid]. The resulting UUID is shape-compatible
+     * with RFC 4122 but the version/variant bits reflect the underlying Ashid bytes,
+     * not RFC 4122 conventions, unless the Ashid was originally created from a
+     * v1/v4/v7 UUID.
+     */
+    @JvmStatic
+    fun toUuid(id: String): java.util.UUID {
+        val (_, encodedTimestamp, encodedRandom) = parse(id)
+        val high = EncoderBase32Crockford.decodeULong(encodedTimestamp)
+        val low = EncoderBase32Crockford.decodeULong(encodedRandom)
+        return java.util.UUID(high.toLong(), low.toLong())
+    }
+
+    /**
+     * Convert a UUID into an Ashid.
+     *
+     * Splits the 128-bit UUID into two 64-bit halves. If the high half fits in 45 bits
+     * (≤ MAX_TIMESTAMP), the result is a standard 22-char Ashid base. Otherwise — for
+     * UUIDv4 (random) and UUIDv7 (whose version bits force the high half above 2^45) —
+     * the result is a 26-char ashid4 base.
+     *
+     * Round-trip through [toUuid] is byte-identical in both cases.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun fromUuid(uuid: java.util.UUID, prefix: String? = null): String {
+        val high = uuid.mostSignificantBits.toULong()
+        val low = uuid.leastSignificantBits.toULong()
+        return if (high <= MAX_TIMESTAMP.toULong()) {
+            createWithULongRandom(prefix, high.toLong(), low)
+        } else {
+            create4(prefix, high, low)
+        }
+    }
+
+    /**
+     * Convert a UUID string (36-char dashed or 32-char hex) into an Ashid.
+     * See [fromUuid] for routing behavior.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun fromUuid(uuid: String, prefix: String? = null): String {
+        val hex = uuid.replace("-", "").lowercase()
+        require(hex.length == 32 && hex.all { it in '0'..'9' || it in 'a'..'f' }) {
+            "Invalid UUID: must be 32 or 36 hex characters (got \"$uuid\")"
+        }
+        return fromUuid(java.util.UUID(hex.substring(0, 16).toULong(16).toLong(), hex.substring(16, 32).toULong(16).toLong()), prefix)
+    }
+
+    /**
+     * Internal builder used by [fromUuid] when the random component might exceed
+     * Long.MAX_VALUE. Mirrors [create] but takes the random as ULong so a UUID's
+     * full low-64-bits round-trip cleanly.
+     */
+    private fun createWithULongRandom(prefix: String?, time: Long, randomLong: ULong): String {
+        val normalizedPrefix = normalizePrefix(prefix)
+        require(time in 0..MAX_TIMESTAMP) { "Ashid timestamp must be in [0, $MAX_TIMESTAMP]" }
+
+        val baseId = if (normalizedPrefix != null) {
+            val randomEncoded = if (time > 0) {
+                EncoderBase32Crockford.encode(randomLong, padded = true)
+            } else {
+                EncoderBase32Crockford.encode(randomLong)
+            }
+            if (time > 0) {
+                EncoderBase32Crockford.encode(time) + randomEncoded
+            } else {
+                randomEncoded
+            }
+        } else {
+            val timeEncoded = EncoderBase32Crockford.encode(time).padStart(TIMESTAMP_ENCODED_LENGTH, '0')
+            val randomEncoded = EncoderBase32Crockford.encode(randomLong, padded = true)
+            timeEncoded + randomEncoded
+        }
+        return (normalizedPrefix ?: "") + baseId
     }
 
     /**
