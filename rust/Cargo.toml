@@ -1,0 +1,18 @@
+[package]
+name = "ashid"
+version = "1.2.0"
+edition = "2021"
+rust-version = "1.70"
+description = "Ash Unique IDs — time-sortable identifiers with optional type prefixes"
+license = "MIT"
+repository = "https://github.com/wildeagency/ashid"
+readme = "README.md"
+keywords = ["id", "uuid", "ulid", "crockford", "base32"]
+categories = ["data-structures", "encoding"]
+
+[dependencies]
+getrandom = "0.2"
+
+[lib]
+name = "ashid"
+path = "src/lib.rs"

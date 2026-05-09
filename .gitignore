@@ -41,6 +41,9 @@ pnpm-debug.log*
 # TypeScript
 *.tsbuildinfo
 
+# Rust
+rust/Cargo.lock
+
 # Gradle
 .gradle/
 gradle-app.setting
