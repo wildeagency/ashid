@@ -1,0 +1,52 @@
+name: CI · TypeScript
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/ci-typescript.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'typescript/**'
+      - '.github/workflows/ci-typescript.yml'
+
+jobs:
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Test coverage
+        run: pnpm test:coverage
