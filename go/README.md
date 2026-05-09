@@ -13,13 +13,13 @@ Pure Go, standard library only (`crypto/rand`, `encoding/binary`, `math/big`, `t
 ## Installation
 
 ```bash
-go get github.com/IodeSystems/ashid/go
+go get github.com/wildeagency/ashid/go
 ```
 
 ## Quick Start
 
 ```go
-import ashid "github.com/IodeSystems/ashid/go"
+import ashid "github.com/wildeagency/ashid/go"
 
 // Time-sortable IDs with type prefix
 userID := ashid.New("user")   // "user_1kbg1jmtt4v3x8k9p2m1n"

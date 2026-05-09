@@ -40,7 +40,7 @@ asset_1kbg1jmtr9k5v2x8p4m1n ← Obviously an asset
 | [ashid](./typescript/) | TypeScript/JavaScript | `npm install ashid` |
 | ashid | Kotlin/Java | `implementation("agency.wilde:ashid:1.0.0")` |
 | [ashid](./python/) | Python | `pip install ashid` |
-| [ashid](./go/) | Go | `go get github.com/IodeSystems/ashid/go` |
+| [ashid](./go/) | Go | `go get github.com/wildeagency/ashid/go` |
 
 ## Quick Start
 
@@ -67,7 +67,7 @@ val rawId = ashid()           // "1kbg1jmtt4v3x8k9p2m1n0w"
 ### Go
 
 ```go
-import ashid "github.com/IodeSystems/ashid/go"
+import ashid "github.com/wildeagency/ashid/go"
 
 userID := ashid.New("user")   // "user_1kbg1jmtt4v3x8k9p2m1n"
 rawID := ashid.New()          // "1kbg1jmtt4v3x8k9p2m1n0w"
