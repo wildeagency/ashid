@@ -575,7 +575,8 @@ fn error_invalid_char_for_bad_decode() {
 
 #[test]
 fn to_uuid_format() {
-    let id = Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
+    let id =
+        Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
     let uuid = Ashid::to_uuid(&id).unwrap();
     assert_eq!(uuid.len(), 36);
     let parts: Vec<&str> = uuid.split('-').collect();
@@ -589,14 +590,19 @@ fn to_uuid_format() {
 
 #[test]
 fn to_uuid_is_prefix_agnostic() {
-    let with_prefix = Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
+    let with_prefix =
+        Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
     let no_prefix = Ashid::create(None, Some(1733140800000), Some(8234567890123456789)).unwrap();
-    assert_eq!(Ashid::to_uuid(&with_prefix).unwrap(), Ashid::to_uuid(&no_prefix).unwrap());
+    assert_eq!(
+        Ashid::to_uuid(&with_prefix).unwrap(),
+        Ashid::to_uuid(&no_prefix).unwrap()
+    );
 }
 
 #[test]
 fn roundtrip_standard_form_through_uuid() {
-    let original = Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
+    let original =
+        Ashid::create(Some("user"), Some(1733140800000), Some(8234567890123456789)).unwrap();
     let uuid = Ashid::to_uuid(&original).unwrap();
     let restored = Ashid::from_uuid(&uuid, Some("user")).unwrap();
     assert_eq!(original, restored);

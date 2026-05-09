@@ -47,7 +47,11 @@ impl fmt::Display for AshidError {
                 write!(f, "invalid character in Base32 string: '{}'", ch)
             }
             AshidError::InvalidUuid(s) => {
-                write!(f, "invalid UUID: must be 32 or 36 hex characters (got \"{}\")", s)
+                write!(
+                    f,
+                    "invalid UUID: must be 32 or 36 hex characters (got \"{}\")",
+                    s
+                )
             }
         }
     }
