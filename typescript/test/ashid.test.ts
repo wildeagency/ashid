@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Ashid, ashid, ashid4, parseAshid } from '../src/ashid';
+import { EncoderBase32Crockford } from '../src/encoder';
 
 describe('Ashid', () => {
   describe('create', () => {
@@ -56,10 +57,31 @@ describe('Ashid', () => {
       expect(() => Ashid.create(undefined, -1)).toThrow('non-negative');
     });
 
-    it('should throw on timestamp exceeding max (Dec 12, 3084)', () => {
-      const maxTimestamp = 35184372088831;
-      expect(() => Ashid.create(undefined, maxTimestamp)).not.toThrow();
-      expect(() => Ashid.create(undefined, maxTimestamp + 1)).toThrow('must not exceed');
+    it('should accept timestamps beyond the former MAX_TIMESTAMP (no longer throws)', () => {
+      // The previous Dec 12 3084 ceiling was a v1-shape constraint. create() now
+      // auto-routes oversized timestamps to a 13-char encoding so any non-negative
+      // value (including a full 64-bit BigInt) is representable.
+      const formerMax = 35184372088831;
+      expect(() => Ashid.create(undefined, formerMax)).not.toThrow();
+      expect(() => Ashid.create(undefined, formerMax + 1)).not.toThrow();
+      expect(() => Ashid.create(undefined, 2n ** 64n - 1n)).not.toThrow();
+    });
+
+    it('should accept bigint time', () => {
+      const id = Ashid.create('user', 1000n, 0n);
+      expect(id).toBe(Ashid.create('user', 1000, 0n));
+    });
+
+    it('create4 with prefix pads both halves to 13 chars', () => {
+      const id = Ashid.create4('user', 5n, 0n);
+      expect(id).toBe('user_00000000000050000000000000');
+      expect(id.length).toBe(5 + 26);
+    });
+
+    it('create4 without prefix produces a 26-char base', () => {
+      const id = Ashid.create4(undefined, 5n, 0n);
+      expect(id).toBe('00000000000050000000000000');
+      expect(id.length).toBe(26);
     });
 
     it('should throw on negative random value', () => {
@@ -81,6 +103,23 @@ describe('Ashid', () => {
     });
   });
 
+  describe('create1', () => {
+    it('should be an alias for create with default options', () => {
+      expect(Ashid.create1('user', 1000, 0n)).toBe(Ashid.create('user', 1000, 0n));
+      expect(Ashid.create1(undefined, 1000, 0n)).toBe(Ashid.create(undefined, 1000, 0n));
+    });
+
+    it('should accept bigint time', () => {
+      expect(Ashid.create1('user', 1000n, 0n)).toBe(Ashid.create('user', 1000, 0n));
+    });
+
+    it('with defaults should produce a valid ashid', () => {
+      const id = Ashid.create1('user');
+      expect(Ashid.isValid(id)).toBe(true);
+      expect(id).toMatch(/^user_/);
+    });
+  });
+
   describe('fixed vs variable length formats', () => {
     describe('no prefix (fixed 22-char)', () => {
       it('timestamp 0 should be padded to 22 chars', () => {
@@ -96,36 +135,40 @@ describe('Ashid', () => {
     });
 
     describe('prefix (variable length with delimiter)', () => {
-      it('timestamp 0, random 0 should be minimal', () => {
-        const id = Ashid.create('user', 0, 0);
-        expect(id).toBe('user_0');
+      // The random half is always 13-char padded — it's the parse anchor.
+      // The timestamp half truncates leading zeros under create() (type-1).
+
+      it('timestamp 0, random 0 → unpadded "0" + padded random', () => {
+        const id = Ashid.create('user', 0, 0n);
+        expect(id).toBe('user_00000000000000');
+        expect(id.length).toBe(5 + 1 + 13);
       });
 
-      it('timestamp 0, random 1 should omit timestamp', () => {
-        const id = Ashid.create('user', 0, 1);
-        expect(id).toBe('user_1');
+      it('timestamp 0, random 1 → unpadded "0" + padded random', () => {
+        const id = Ashid.create('user', 0, 1n);
+        expect(id).toBe('user_00000000000001');
       });
 
-      it('timestamp 0, random 31 should be short', () => {
-        const id = Ashid.create('user', 0, 31);
-        expect(id).toBe('user_z');
+      it('timestamp 0, random 31 → unpadded "0" + padded random', () => {
+        const id = Ashid.create('user', 0, 31n);
+        expect(id).toBe('user_0000000000000z');
       });
 
       it('timestamp 1, random 0 should include timestamp', () => {
-        const id = Ashid.create('user', 1, 0);
+        const id = Ashid.create('user', 1, 0n);
         expect(id).toBe('user_10000000000000');
         expect(id.length).toBe(19); // 'user_' (5) + 1 + 13
       });
 
       it('current timestamp should have variable length', () => {
-        const id = Ashid.create('user', Date.now(), 0);
+        const id = Ashid.create('user', Date.now(), 0n);
         // 'user_' (5) + 9 (current timestamp) + 13 (padded random) = 27
         expect(id.length).toBe(27);
       });
 
       it('single letter prefix should also get delimiter', () => {
-        const id = Ashid.create('u', 0, 0);
-        expect(id).toBe('u_0');
+        const id = Ashid.create('u', 0, 0n);
+        expect(id).toBe('u_00000000000000');
       });
     });
   });
@@ -268,11 +311,20 @@ describe('Ashid', () => {
   });
 
   describe('normalize()', () => {
-    it('should lowercase uppercase characters', () => {
+    // normalize() routes through create() (the default type-1 path).
+    // - v1 inputs round-trip to their own v1 shape.
+    // - Full-entropy ashid4 inputs round-trip to their own ashid4 shape because
+    //   the first long naturally encodes to 13 chars (no padding needed).
+    // - An ashid4 whose first long is small enough to truncate (e.g.
+    //   create4('tok', 1n, 0n)) collapses to v1 shape; the two longs survive
+    //   but the string shape is no longer byte-identical to the input.
+
+    it('should round-trip a v1 ashid (uppercase variant) back to original', () => {
       const original = Ashid.create('user', 1609459200000, 0n);
-      const uppercased = original.toUpperCase();
-      const normalized = Ashid.normalize(uppercased);
+      const normalized = Ashid.normalize(original.toUpperCase());
       expect(normalized).toBe(original);
+      expect(Ashid.timestamp(normalized)).toBe(1609459200000);
+      expect(Ashid.random(normalized)).toBe(0n);
     });
 
     it('should convert ambiguous characters via decode/encode round-trip', () => {
@@ -287,11 +339,9 @@ describe('Ashid', () => {
       expect(Ashid.random(normalized)).toBe(1111n);
     });
 
-    it('should normalize variable length format', () => {
+    it('should round-trip variable length v1 format back to its own form', () => {
       const original = Ashid.create('user', 1609459200000, 12345n);
-      const uppercased = original.toUpperCase();
-      const normalized = Ashid.normalize(uppercased);
-      expect(normalized).toBe(original);
+      expect(Ashid.normalize(original.toUpperCase())).toBe(original);
     });
 
     it('should preserve values through round-trip', () => {
@@ -301,10 +351,20 @@ describe('Ashid', () => {
       expect(Ashid.random(normalized)).toBe(12345n);
     });
 
-    it('should normalize fixed format (no prefix) with uppercase', () => {
+    it('should round-trip a no-prefix v1 ashid back to its own form', () => {
       const original = Ashid.create(undefined, 1609459200000, 12345n);
-      const normalized = Ashid.normalize(original.toUpperCase());
-      expect(normalized).toBe(original);
+      expect(Ashid.normalize(original.toUpperCase())).toBe(original);
+    });
+
+    it('should be idempotent', () => {
+      const v1 = Ashid.create('user', 1609459200000, 12345n);
+      const once = Ashid.normalize(v1);
+      expect(Ashid.normalize(once)).toBe(once);
+      // Use a full-entropy ashid4 so the first long naturally fills 13 chars
+      // — otherwise the shape would collapse on normalize.
+      const a4 = Ashid.create4('tok', 0xdeadbeefcafebaben, 0x0123456789abcdefn);
+      expect(Ashid.normalize(a4)).toBe(a4);
+      expect(Ashid.normalize(Ashid.normalize(a4))).toBe(a4);
     });
 
     it('should convert dash to underscore in prefix', () => {
@@ -326,6 +386,83 @@ describe('Ashid', () => {
       const original = Ashid.create('user', 1609459200000, random);
       const normalized = Ashid.normalize(original.toUpperCase());
       expect(Ashid.random(normalized)).toBe(random);
+    });
+
+    // ── ashid4 (two random longs) normalization ────────────────────
+    // Regression coverage: prior to the unified implementation,
+    // `normalize` routed through `create` (timestamp + random) for
+    // every input, which used unpadded timestamp encoding. For ashid4
+    // inputs that put leading zeros at the front of the first long,
+    // those zeros got dropped — corrupting the value. Current
+    // implementation parses two longs, re-emits via `create4`, so
+    // padding is consistent across formats.
+
+    it('should round-trip ashid4 with prefix unchanged (identity)', () => {
+      const original = Ashid.create4('tok', 1234567890123456789n, 9876543210987654321n);
+      expect(Ashid.normalize(original)).toBe(original);
+    });
+
+    it('should round-trip ashid4 without prefix unchanged (identity)', () => {
+      const original = Ashid.create4(undefined, 1234567890123456789n, 9876543210987654321n);
+      expect(Ashid.normalize(original)).toBe(original);
+    });
+
+    it('should normalize uppercase ashid4 with prefix back to canonical', () => {
+      const original = Ashid.create4('tok', 0xdeadbeefcafebaben, 0x0123456789abcdefn);
+      const uppercased = original.toUpperCase();
+      expect(Ashid.normalize(uppercased)).toBe(original);
+    });
+
+    it('should normalize uppercase ashid4 without prefix back to canonical', () => {
+      const original = Ashid.create4(undefined, 0xdeadbeefcafebaben, 0x0123456789abcdefn);
+      const uppercased = original.toUpperCase();
+      expect(Ashid.normalize(uppercased)).toBe(original);
+    });
+
+    it('should recover values from lookalike-mangled ashid4 body (shape may collapse)', () => {
+      // Small first long means the canonical type-1 path will truncate the
+      // leading zeros, so the *shape* collapses to v1. The *values* still
+      // survive through the lookalike-fixing decode step — which is the
+      // actual point of normalize().
+      const r1 = 0x0000000000000001n;
+      const r2 = 0x0000000000000000n;
+      const original = Ashid.create4('tok', r1, r2);
+      const mangled = 'tok_' + original.slice(4).replace(/0/g, 'O').replace(/1/g, 'l');
+      const normalized = Ashid.normalize(mangled);
+      expect(Ashid.timestamp(normalized)).toBe(Number(r1));
+      expect(Ashid.random(normalized)).toBe(r2);
+    });
+
+    it('should normalize lookalike-mangled ashid4 with full-entropy first long back to canonical', () => {
+      // Full-entropy first long → encoded length 13 → no truncation → shape preserved.
+      const r1 = 0xdeadbeef00000001n;
+      const r2 = 0x0123456789abcdefn;
+      const original = Ashid.create4('tok', r1, r2);
+      const mangled = 'tok_' + original.slice(4).replace(/0/g, 'O').replace(/1/g, 'l');
+      expect(Ashid.normalize(mangled)).toBe(original);
+    });
+
+    it('should preserve both random components of ashid4 through normalize+toUpperCase', () => {
+      const r1 = 0xfedcba9876543210n;
+      const r2 = 0x0123456789abcdefn;
+      const original = Ashid.create4('tok', r1, r2);
+      const round = Ashid.normalize(original.toUpperCase());
+      // Both random components survive: extract via parse + decode
+      const [, encR1, encR2] = Ashid.parse(round);
+      expect(EncoderBase32Crockford.decodeBigInt(encR1)).toBe(r1);
+      expect(EncoderBase32Crockford.decodeBigInt(encR2)).toBe(r2);
+    });
+
+    it('should normalize v1 and a same-longs ashid4 to the same canonical (type-1) form', () => {
+      // normalize now routes through create() (type-1), so both inputs
+      // collapse onto the unpadded type-1 shape — and the ashid4 in this
+      // case has a small first long that gets truncated.
+      const long1 = 1609459200000n;
+      const long2 = 12345n;
+      const v1 = Ashid.create('tok', Number(long1), long2);
+      const a4 = Ashid.create4('tok', long1, long2);
+      expect(Ashid.normalize(v1)).toBe(Ashid.normalize(a4));
+      expect(Ashid.normalize(v1)).toBe(v1);
     });
   });
 
@@ -585,6 +722,66 @@ describe('Ashid', () => {
       expect(() => Ashid.fromUuid('not-a-uuid')).toThrow(/Invalid UUID/);
       expect(() => Ashid.fromUuid('550e8400e29b41d4a71644665544000')).toThrow(/Invalid UUID/); // 31 hex chars
       expect(() => Ashid.fromUuid('550e8400-e29b-41d4-a716-44665544000g')).toThrow(/Invalid UUID/); // non-hex
+    });
+
+    // Helpers for the property test: generate a random 128-bit UUID-shaped hex
+    // string. Uses Math.random — fine for test coverage; not cryptographic.
+    function randomUuid(): string {
+      const hex = Array.from({ length: 32 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+    }
+
+    it('round-trips 1000 random UUIDs losslessly (property test)', () => {
+      for (let i = 0; i < 1000; i++) {
+        const uuid = randomUuid();
+        expect(Ashid.toUuid(Ashid.fromUuid(uuid))).toBe(uuid);
+      }
+    });
+
+    it('round-trips 1000 random UUIDs with prefix losslessly (property test)', () => {
+      for (let i = 0; i < 1000; i++) {
+        const uuid = randomUuid();
+        const id = Ashid.fromUuid(uuid, 'tok');
+        expect(id).toMatch(/^tok_/);
+        expect(Ashid.toUuid(id)).toBe(uuid);
+      }
+    });
+
+    it('round-trips UUIDs with the high bit of each half set', () => {
+      // High bit of high half: 8000... — beyond MAX_TIMESTAMP → ashid4 form.
+      // High bit of low half: ...8000 — exercises low-half sign-bit territory.
+      const cases = [
+        '80000000-0000-0000-0000-000000000000',
+        '00000000-0000-0000-8000-000000000000',
+        '80000000-0000-0000-8000-000000000000',
+        'ffffffff-ffff-ffff-8000-000000000001',
+        '80000000-0000-0001-ffff-ffffffffffff',
+      ];
+      for (const uuid of cases) {
+        expect(Ashid.toUuid(Ashid.fromUuid(uuid))).toBe(uuid);
+      }
+    });
+  });
+
+  describe('negative input handling', () => {
+    // create/create1/create4 all reject negative inputs via the encoder.
+    // Callers passing signed-long UUID halves (Java/Kotlin Long) must mask to
+    // unsigned themselves before calling — the library does not silently
+    // reinterpret negatives.
+
+    it('create4 throws on negative BigInt', () => {
+      expect(() => Ashid.create4('tok', -1n, 0n)).toThrow(/non-negative/);
+      expect(() => Ashid.create4('tok', 0n, -2n)).toThrow(/non-negative/);
+    });
+
+    it('create throws on negative BigInt time', () => {
+      expect(() => Ashid.create('user', -1n, 0n)).toThrow(/non-negative/);
+    });
+
+    it('create throws on negative BigInt random', () => {
+      expect(() => Ashid.create('user', 1000, -1n)).toThrow(/non-negative/);
     });
   });
 });
