@@ -1,19 +1,28 @@
 name: Publish to npm
 
+# Publishes the TypeScript package to npm using OIDC trusted publishing — no
+# long-lived NPM_TOKEN required. The trust relationship is configured on the
+# npm package settings page (Settings → Trusted Publisher) and binds:
+#   publisher        = GitHub Actions
+#   org/repo         = wildeagency/ashid
+#   workflow file    = publish-npm.yml  (this file's basename)
+# The runner mints an OIDC token (id-token: write) which npm exchanges for a
+# short-lived publish credential. Provenance attestation is generated
+# automatically by the npm CLI on this path.
+
 on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to publish (e.g., 1.0.4)'
-        required: true
-        type: string
 
 jobs:
   publish:
     name: Publish TypeScript Package
     runs-on: ubuntu-latest
+    permissions:
+      # Required for npm OIDC trusted publishing.
+      id-token: write
+      contents: read
     defaults:
       run:
         working-directory: typescript
@@ -24,8 +33,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm
+        # Trusted-publisher OIDC requires npm CLI ≥ 11.5.1; Node 22 currently
+        # ships with npm 10.x.
+        run: npm install -g npm@latest
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -43,5 +57,3 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
