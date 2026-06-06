@@ -488,6 +488,128 @@ func TestNormalize_Preserves64BitEntropy(t *testing.T) {
 	}
 }
 
+// ---- Normalize: ashid4 round-trip ----
+//
+// Regression coverage: prior to the unified normalize, the function routed
+// through Create (timestamp + random) for every input, which encoded the
+// timestamp unpadded. For ashid4 inputs with leading zeros at the front of
+// the first long, those zeros got dropped — corrupting the value.
+
+func TestNormalize_Ashid4_WithPrefix_FullEntropyIdentity(t *testing.T) {
+	original, err := Create4("tok", 0x112210f47de98115, 0x88f7bfa8ac471d31)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	normalized, err := Normalize(original)
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if normalized != original {
+		t.Errorf("Normalize(ashid4) = %q, want identity %q", normalized, original)
+	}
+}
+
+func TestNormalize_Ashid4_NoPrefix_FullEntropyIdentity(t *testing.T) {
+	original, err := Create4("", 0x112210f47de98115, 0x88f7bfa8ac471d31)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	normalized, err := Normalize(original)
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if normalized != original {
+		t.Errorf("Normalize(ashid4 no-prefix) = %q, want identity %q", normalized, original)
+	}
+}
+
+func TestNormalize_Ashid4_UppercasedBackToCanonical(t *testing.T) {
+	original, err := Create4("tok", 0xdeadbeefcafebabe, 0x0123456789abcdef)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	normalized, err := Normalize(strings.ToUpper(original))
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if normalized != original {
+		t.Errorf("Normalize(upper ashid4) = %q, want %q", normalized, original)
+	}
+}
+
+func TestNormalize_Ashid4_SmallFirstLong_CollapsesToV1Shape(t *testing.T) {
+	// A small first long means the canonical type-1 path truncates leading
+	// zeros, so the shape collapses to v1. The values survive — that's the
+	// point of normalize.
+	r1 := uint64(1)
+	r2 := uint64(0)
+	original, err := Create4("tok", r1, r2)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	normalized, err := Normalize(original)
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	gotTs, err := Timestamp(normalized)
+	if err != nil {
+		t.Fatalf("Timestamp error: %v", err)
+	}
+	gotRand, err := Random(normalized)
+	if err != nil {
+		t.Fatalf("Random error: %v", err)
+	}
+	if uint64(gotTs) != r1 {
+		t.Errorf("first long after normalize = %d, want %d", gotTs, r1)
+	}
+	if gotRand.Uint64() != r2 {
+		t.Errorf("second long after normalize = %s, want %d", gotRand, r2)
+	}
+}
+
+func TestNormalize_Idempotent(t *testing.T) {
+	v1 := mustCreate(t, "user", 1609459200000, 12345)
+	once, _ := Normalize(v1)
+	twice, _ := Normalize(once)
+	if twice != once {
+		t.Errorf("v1 idempotence broken: once=%q twice=%q", once, twice)
+	}
+
+	a4, err := Create4("tok", 0xdeadbeefcafebabe, 0x0123456789abcdef)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	a4Once, _ := Normalize(a4)
+	a4Twice, _ := Normalize(a4Once)
+	if a4Once != a4 {
+		t.Errorf("ashid4 normalize identity broken: %q vs %q", a4Once, a4)
+	}
+	if a4Twice != a4Once {
+		t.Errorf("ashid4 idempotence broken: once=%q twice=%q", a4Once, a4Twice)
+	}
+}
+
+func TestNormalize_V1AndMatchingAshid4_CollapseToSameShape(t *testing.T) {
+	// normalize routes through buildBase(padded=false), so a v1 and an ashid4
+	// with the same two longs (when the first long is small enough to truncate)
+	// produce the same canonical (v1) shape.
+	var long1 int64 = 1609459200000
+	long2 := uint64(12345)
+	v1 := mustCreate(t, "tok", long1, long2)
+	a4, err := Create4("tok", uint64(long1), long2)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	nV1, _ := Normalize(v1)
+	nA4, _ := Normalize(a4)
+	if nV1 != nA4 {
+		t.Errorf("v1 vs ashid4 normalize diverge: %q vs %q", nV1, nA4)
+	}
+	if nV1 != v1 {
+		t.Errorf("v1 normalize not byte-identical: got %q want %q", nV1, v1)
+	}
+}
+
 // ---- IsValid ----
 
 func TestIsValid_ValidIDs(t *testing.T) {
