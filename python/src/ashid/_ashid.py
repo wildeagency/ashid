@@ -44,6 +44,34 @@ def _normalize_prefix(prefix: Optional[str]) -> Optional[str]:
     return cleaned + "_"
 
 
+def _build_base(prefix: Optional[str], n1: int, n2: int, padded: bool) -> str:
+    """Encode two non-negative ints into the canonical base ID form.
+
+    Mirrors the TypeScript buildBase routed through create()/create4():
+      - padded=True   -> both halves 13-char zero-padded (ashid4 shape).
+      - padded=False  -> first half encoded unpadded when a prefix is present;
+                         else padded to 9 chars (timestamp width) when the raw
+                         encoding fits in 9 chars, else padded to 13.
+    The second half is always 13-char padded.
+    """
+    if n1 < 0 or n2 < 0:
+        raise ValueError("Ashid random value must be non-negative")
+    normalized_prefix = _normalize_prefix(prefix)
+
+    if normalized_prefix or padded:
+        encoded1 = EncoderBase32Crockford.encode(n1, padded=padded)
+    else:
+        raw = EncoderBase32Crockford.encode(n1)
+        width = (
+            _TIMESTAMP_ENCODED_LENGTH
+            if len(raw) <= _TIMESTAMP_ENCODED_LENGTH
+            else _RANDOM_ENCODED_LENGTH
+        )
+        encoded1 = raw.rjust(width, "0")
+    encoded2 = EncoderBase32Crockford.encode(n2, padded=True)
+    return (normalized_prefix or "") + encoded1 + encoded2
+
+
 class Ashid:
     """Time-sortable unique identifier with optional type prefix."""
 
@@ -203,12 +231,18 @@ class Ashid:
 
     @staticmethod
     def normalize(id: str) -> str:
-        """Normalize an Ashid: lowercase prefix and re-encode through canonical form."""
-        prefix, encoded_timestamp, encoded_random = Ashid.parse(id)
-        timestamp = EncoderBase32Crockford.decode(encoded_timestamp)
-        random = EncoderBase32Crockford.decode(encoded_random)
+        """Normalize an Ashid: lowercase prefix and re-encode through canonical form.
+
+        Type-1 inputs round-trip to type-1 shape; full-entropy ashid4 inputs
+        round-trip to ashid4 shape (the first long naturally fills 13 chars).
+        An ashid4 with a small first long collapses to type-1 shape — the two
+        longs survive, only the string shape changes.
+        """
+        prefix, encoded_first, encoded_second = Ashid.parse(id)
         normalized_prefix = prefix.lower() if prefix else None
-        return Ashid.create(normalized_prefix, timestamp, random)
+        long1 = EncoderBase32Crockford.decode(encoded_first)
+        long2 = EncoderBase32Crockford.decode(encoded_second)
+        return _build_base(normalized_prefix, long1, long2, False)
 
     @staticmethod
     def to_uuid(id: str) -> str:
