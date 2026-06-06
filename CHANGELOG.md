@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 No unreleased changes.
 
+## [1.3.0] - 2026-06-06 (Kotlin)
+
+### Fixed
+- `Ashid.normalize()` corrupted ashid4 inputs whose first long encoded with leading zeros. The previous implementation routed every input through `Ashid.create()` (timestamp + random), which writes the first component unpadded — dropping the leading zeros of a 13-char-padded ashid4 random component and producing a different value. Closes #9.
+
+### Changed
+- `normalize()` now routes through a shared `buildBase(prefix, n1, n2, padded = false)` helper that mirrors the TypeScript 1.6.0 builder. A v1 input still normalizes to v1 shape; a full-entropy ashid4 input round-trips to ashid4 shape (the first long naturally fills 13 chars). A pathological ashid4 with a small first long collapses to v1 shape — the two longs survive, only the string shape changes. Idempotent: `normalize(normalize(x)) == normalize(x)`.
+- Decoded values now flow through `ULong` (consistent with the encoder's unsigned long path); existing `create()`/`create4()` public signatures unchanged.
+
 ## [1.1.0] - 2026-06-06 (Python)
 
 ### Fixed

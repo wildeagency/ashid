@@ -213,17 +213,46 @@ object Ashid {
      * Normalize an Ashid by lowercasing and converting ambiguous characters
      * (I/L→1, O→0, etc.) to their canonical form.
      *
+     * Type-1 inputs round-trip to type-1 shape; full-entropy ashid4 inputs
+     * round-trip to ashid4 shape (the first long naturally fills 13 chars).
+     * An ashid4 with a small first long collapses to type-1 shape — the two
+     * longs survive, only the string shape changes.
+     *
      * @param id Ashid string (potentially with mixed case or ambiguous chars)
      * @return Normalized Ashid string
      */
     @JvmStatic
     fun normalize(id: String): String {
-        val (prefix, encodedTimestamp, encodedRandom) = parse(id)
-        val timestamp = EncoderBase32Crockford.decode(encodedTimestamp)
-        val random = EncoderBase32Crockford.decode(encodedRandom)
-        // Lowercase the prefix
+        val (prefix, encodedFirst, encodedSecond) = parse(id)
+        val long1 = EncoderBase32Crockford.decodeULong(encodedFirst)
+        val long2 = EncoderBase32Crockford.decodeULong(encodedSecond)
         val normalizedPrefix = prefix.lowercase().ifEmpty { null }
-        return create(normalizedPrefix, timestamp, random)
+        return buildBase(normalizedPrefix, long1, long2, padded = false)
+    }
+
+    /**
+     * Encode two non-negative ULong components into the canonical base ID form.
+     *
+     * Mirrors the TypeScript buildBase routed through create()/create4():
+     *   - padded = true  → both halves 13-char zero-padded (ashid4 shape).
+     *   - padded = false → first half encoded unpadded when a prefix is present;
+     *                      else padded to 9 chars (timestamp width) when the raw
+     *                      encoding fits in 9 chars, else padded to 13.
+     * The second half is always 13-char padded.
+     */
+    private fun buildBase(prefix: String?, n1: ULong, n2: ULong, padded: Boolean): String {
+        val normalizedPrefix = normalizePrefix(prefix)
+        val hasPrefix = normalizedPrefix != null
+
+        val encoded1 = if (hasPrefix || padded) {
+            EncoderBase32Crockford.encode(n1, padded = padded)
+        } else {
+            val raw = EncoderBase32Crockford.encode(n1, padded = false)
+            val width = if (raw.length <= TIMESTAMP_ENCODED_LENGTH) TIMESTAMP_ENCODED_LENGTH else RANDOM_ENCODED_LENGTH
+            raw.padStart(width, '0')
+        }
+        val encoded2 = EncoderBase32Crockford.encode(n2, padded = true)
+        return (normalizedPrefix ?: "") + encoded1 + encoded2
     }
 
     /**
