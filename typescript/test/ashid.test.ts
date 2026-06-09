@@ -84,6 +84,65 @@ describe('Ashid', () => {
       expect(id.length).toBe(26);
     });
 
+    // Padding lock-down. create4 must always emit both halves 13-char padded,
+    // regardless of input magnitude. These pin the wire format so a refactor
+    // that drops padding (e.g. routing create4 through an unpadded builder)
+    // fails loudly.
+    describe('create4 padding lockdown', () => {
+      it('zero/zero with prefix → both halves 13 zeros', () => {
+        expect(Ashid.create4('tok', 0n, 0n)).toBe('tok_00000000000000000000000000');
+      });
+
+      it('zero/zero without prefix → 26 zeros', () => {
+        expect(Ashid.create4(undefined, 0n, 0n)).toBe('00000000000000000000000000');
+      });
+
+      it('one/zero with prefix → first half padded, no truncation', () => {
+        expect(Ashid.create4('tok', 1n, 0n)).toBe('tok_00000000000010000000000000');
+      });
+
+      it('Crockford "z" (31) preserves its single trailing char after padding', () => {
+        expect(Ashid.create4('tok', 31n, 0n)).toBe('tok_000000000000z0000000000000');
+      });
+
+      it('max u64 first half fills exactly 13 chars (no overflow into prefix)', () => {
+        const id = Ashid.create4('tok', (2n ** 64n) - 1n, 0n);
+        expect(id).toBe('tok_fzzzzzzzzzzzz0000000000000');
+        expect(id.length).toBe(3 + 1 + 26);
+      });
+
+      it('max u64 second half fills exactly 13 chars', () => {
+        const id = Ashid.create4('tok', 0n, (2n ** 64n) - 1n);
+        expect(id).toBe('tok_0000000000000fzzzzzzzzzzzz');
+        expect(id.length).toBe(3 + 1 + 26);
+      });
+
+      it('no-prefix output always exactly 26 chars across input magnitudes', () => {
+        const samples: Array<[bigint, bigint]> = [
+          [0n, 0n],
+          [1n, 0n],
+          [0n, 1n],
+          [31n, 31n],
+          [(2n ** 64n) - 1n, 0n],
+          [0n, (2n ** 64n) - 1n],
+        ];
+        for (const [r1, r2] of samples) {
+          expect(Ashid.create4(undefined, r1, r2).length).toBe(26);
+        }
+      });
+
+      it('with-prefix output is exactly prefix.length + 1 + 26 across magnitudes', () => {
+        const samples: Array<[bigint, bigint]> = [
+          [0n, 0n],
+          [1n, 0n],
+          [(2n ** 64n) - 1n, (2n ** 64n) - 1n],
+        ];
+        for (const [r1, r2] of samples) {
+          expect(Ashid.create4('tok', r1, r2).length).toBe(3 + 1 + 26);
+        }
+      });
+    });
+
     it('should throw on negative random value', () => {
       expect(() => Ashid.create(undefined, Date.now(), -1)).toThrow('non-negative');
     });
