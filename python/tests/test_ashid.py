@@ -287,6 +287,51 @@ class TestNormalize:
         normalized = Ashid.normalize(original.upper())
         assert Ashid.random(normalized) == random
 
+    # ---- Normalize: ashid4 round-trip ----
+    #
+    # Regression coverage: prior to the unified normalize, the method routed
+    # through create() (timestamp + random) for every input, which encoded the
+    # timestamp half unpadded. For ashid4 inputs with leading zeros at the front
+    # of the first long, those zeros got dropped — corrupting the value.
+
+    def test_ashid4_with_prefix_full_entropy_identity(self):
+        original = Ashid.create4("tok", 0x112210F47DE98115, 0x88F7BFA8AC471D31)
+        assert Ashid.normalize(original) == original
+
+    def test_ashid4_no_prefix_full_entropy_identity(self):
+        original = Ashid.create4(None, 0x112210F47DE98115, 0x88F7BFA8AC471D31)
+        assert Ashid.normalize(original) == original
+
+    def test_ashid4_uppercased_with_prefix_back_to_canonical(self):
+        original = Ashid.create4("tok", 0xDEADBEEFCAFEBABE, 0x0123456789ABCDEF)
+        assert Ashid.normalize(original.upper()) == original
+
+    def test_ashid4_uppercased_no_prefix_back_to_canonical(self):
+        original = Ashid.create4(None, 0xDEADBEEFCAFEBABE, 0x0123456789ABCDEF)
+        assert Ashid.normalize(original.upper()) == original
+
+    def test_ashid4_small_first_long_collapses_to_v1_shape(self):
+        r1, r2 = 1, 0
+        original = Ashid.create4("tok", r1, r2)
+        normalized = Ashid.normalize(original)
+        assert Ashid.timestamp(normalized) == r1
+        assert Ashid.random(normalized) == r2
+
+    def test_idempotent(self):
+        v1 = Ashid.create("user", 1609459200000, 12345)
+        once = Ashid.normalize(v1)
+        assert Ashid.normalize(once) == once
+        a4 = Ashid.create4("tok", 0xDEADBEEFCAFEBABE, 0x0123456789ABCDEF)
+        assert Ashid.normalize(a4) == a4
+        assert Ashid.normalize(Ashid.normalize(a4)) == a4
+
+    def test_v1_and_matching_ashid4_collapse_to_same_canonical(self):
+        long1, long2 = 1609459200000, 12345
+        v1 = Ashid.create("tok", long1, long2)
+        a4 = Ashid.create4("tok", long1, long2)
+        assert Ashid.normalize(v1) == Ashid.normalize(a4)
+        assert Ashid.normalize(v1) == v1
+
 
 class TestIsValid:
     def test_valid_ashids(self):
