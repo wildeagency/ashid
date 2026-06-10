@@ -350,6 +350,91 @@ fn normalize_preserves_64bit_entropy() {
     assert_eq!(Ashid::random(&normalized).unwrap(), r);
 }
 
+// ---------- normalize() — ashid4 round-trip ----------
+//
+// Regression coverage: prior to the unified normalize, the function routed
+// through create() (timestamp + random) for every input, which encoded the
+// first half unpadded. For ashid4 inputs with leading zeros at the front of
+// the first long, those zeros got dropped — corrupting the value.
+
+#[test]
+fn normalize_ashid4_with_prefix_full_entropy_identity() {
+    let original = Ashid::create4(
+        Some("tok"),
+        Some(0x112210f47de98115),
+        Some(0x88f7bfa8ac471d31),
+    )
+    .unwrap();
+    assert_eq!(Ashid::normalize(&original).unwrap(), original);
+}
+
+#[test]
+fn normalize_ashid4_no_prefix_full_entropy_identity() {
+    let original =
+        Ashid::create4(None, Some(0x112210f47de98115), Some(0x88f7bfa8ac471d31)).unwrap();
+    assert_eq!(Ashid::normalize(&original).unwrap(), original);
+}
+
+#[test]
+fn normalize_ashid4_uppercased_back_to_canonical() {
+    let original = Ashid::create4(
+        Some("tok"),
+        Some(0xdeadbeefcafebabe),
+        Some(0x0123456789abcdef),
+    )
+    .unwrap();
+    let upper = original.to_uppercase();
+    assert_eq!(Ashid::normalize(&upper).unwrap(), original);
+}
+
+#[test]
+fn normalize_ashid4_uppercased_no_prefix_back_to_canonical() {
+    let original =
+        Ashid::create4(None, Some(0xdeadbeefcafebabe), Some(0x0123456789abcdef)).unwrap();
+    let upper = original.to_uppercase();
+    assert_eq!(Ashid::normalize(&upper).unwrap(), original);
+}
+
+#[test]
+fn normalize_ashid4_small_first_long_collapses_to_v1_shape() {
+    let r1: u64 = 1;
+    let r2: u64 = 0;
+    let original = Ashid::create4(Some("tok"), Some(r1), Some(r2)).unwrap();
+    let normalized = Ashid::normalize(&original).unwrap();
+    assert_eq!(Ashid::timestamp(&normalized).unwrap(), r1);
+    assert_eq!(Ashid::random(&normalized).unwrap(), r2);
+}
+
+#[test]
+fn normalize_idempotent() {
+    let v1 = Ashid::create(Some("user"), Some(1_609_459_200_000), Some(12345)).unwrap();
+    let once = Ashid::normalize(&v1).unwrap();
+    assert_eq!(Ashid::normalize(&once).unwrap(), once);
+
+    let a4 = Ashid::create4(
+        Some("tok"),
+        Some(0xdeadbeefcafebabe),
+        Some(0x0123456789abcdef),
+    )
+    .unwrap();
+    let a4_once = Ashid::normalize(&a4).unwrap();
+    assert_eq!(a4_once, a4);
+    assert_eq!(Ashid::normalize(&a4_once).unwrap(), a4);
+}
+
+#[test]
+fn normalize_v1_and_matching_ashid4_collapse_to_same_canonical() {
+    let long1: u64 = 1_609_459_200_000;
+    let long2: u64 = 12345;
+    let v1 = Ashid::create(Some("tok"), Some(long1), Some(long2)).unwrap();
+    let a4 = Ashid::create4(Some("tok"), Some(long1), Some(long2)).unwrap();
+    assert_eq!(
+        Ashid::normalize(&v1).unwrap(),
+        Ashid::normalize(&a4).unwrap()
+    );
+    assert_eq!(Ashid::normalize(&v1).unwrap(), v1);
+}
+
 // ---------- is_valid ----------
 
 #[test]
@@ -540,6 +625,76 @@ fn ashid4_preserves_64bit_in_roundtrip() {
     assert_eq!(prefix, "tok_");
     assert_eq!(c1.len(), 13);
     assert_eq!(c2.len(), 13);
+}
+
+// ---------- create4 padding lockdown ----------
+//
+// create4 must always emit both halves 13-char padded, regardless of input
+// magnitude. These pin the wire format so a refactor that drops padding
+// (e.g. routing create4 through an unpadded builder) fails loudly. Mirrors
+// typescript/test/ashid.test.ts.
+
+#[test]
+fn create4_padding_zero_zero_with_prefix() {
+    let id = Ashid::create4(Some("tok"), Some(0), Some(0)).unwrap();
+    assert_eq!(id, "tok_00000000000000000000000000");
+}
+
+#[test]
+fn create4_padding_zero_zero_no_prefix() {
+    let id = Ashid::create4(None, Some(0), Some(0)).unwrap();
+    assert_eq!(id, "00000000000000000000000000");
+}
+
+#[test]
+fn create4_padding_one_zero_with_prefix() {
+    let id = Ashid::create4(Some("tok"), Some(1), Some(0)).unwrap();
+    assert_eq!(id, "tok_00000000000010000000000000");
+}
+
+#[test]
+fn create4_padding_crockford_z_with_prefix() {
+    let id = Ashid::create4(Some("tok"), Some(31), Some(0)).unwrap();
+    assert_eq!(id, "tok_000000000000z0000000000000");
+}
+
+#[test]
+fn create4_padding_max_u64_first_half() {
+    let id = Ashid::create4(Some("tok"), Some(u64::MAX), Some(0)).unwrap();
+    assert_eq!(id, "tok_fzzzzzzzzzzzz0000000000000");
+    assert_eq!(id.len(), 3 + 1 + 26);
+}
+
+#[test]
+fn create4_padding_max_u64_second_half() {
+    let id = Ashid::create4(Some("tok"), Some(0), Some(u64::MAX)).unwrap();
+    assert_eq!(id, "tok_0000000000000fzzzzzzzzzzzz");
+    assert_eq!(id.len(), 3 + 1 + 26);
+}
+
+#[test]
+fn create4_padding_no_prefix_always_26_chars() {
+    let samples: &[(u64, u64)] = &[
+        (0, 0),
+        (1, 0),
+        (0, 1),
+        (31, 31),
+        (u64::MAX, 0),
+        (0, u64::MAX),
+    ];
+    for &(r1, r2) in samples {
+        let id = Ashid::create4(None, Some(r1), Some(r2)).unwrap();
+        assert_eq!(id.len(), 26, "create4(None, {}, {})", r1, r2);
+    }
+}
+
+#[test]
+fn create4_padding_with_prefix_length_invariant() {
+    let samples: &[(u64, u64)] = &[(0, 0), (1, 0), (u64::MAX, u64::MAX)];
+    for &(r1, r2) in samples {
+        let id = Ashid::create4(Some("tok"), Some(r1), Some(r2)).unwrap();
+        assert_eq!(id.len(), 3 + 1 + 26, "create4(tok, {}, {})", r1, r2);
+    }
 }
 
 // ---------- error types ----------

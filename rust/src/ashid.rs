@@ -252,18 +252,56 @@ impl Ashid {
 
     /// Normalize an Ashid: lowercase the prefix, canonicalize lookalike chars
     /// (`I`/`L` → `1`, `O` → `0`, `U` → `V`), convert dash delimiter to underscore.
+    ///
+    /// Type-1 inputs round-trip to type-1 shape; full-entropy ashid4 inputs
+    /// round-trip to ashid4 shape (the first long naturally fills 13 chars).
+    /// An ashid4 with a small first long collapses to type-1 shape — the two
+    /// longs survive, only the string shape changes.
     pub fn normalize(id: &str) -> Result<String, AshidError> {
-        let (prefix, ts, rand) = Self::parse(id)?;
-        let timestamp = EncoderBase32Crockford::decode(&ts)?;
-        let random = EncoderBase32Crockford::decode(&rand)?;
+        let (prefix, encoded_first, encoded_second) = Self::parse(id)?;
+        let long1 = EncoderBase32Crockford::decode(&encoded_first)?;
+        let long2 = EncoderBase32Crockford::decode(&encoded_second)?;
 
         let normalized_prefix: Option<String> = if prefix.is_empty() {
             None
         } else {
             Some(prefix.to_ascii_lowercase())
         };
-        Self::create(normalized_prefix.as_deref(), Some(timestamp), Some(random))
+        Ok(build_base(
+            normalized_prefix.as_deref(),
+            long1,
+            long2,
+            false,
+        ))
     }
+}
+
+/// Encode two `u64` components into the canonical base ID form.
+///
+/// Mirrors the TypeScript `buildBase` routed through `create()`/`create4()`:
+///   - `padded == true`  -> both halves 13-char zero-padded (ashid4 shape).
+///   - `padded == false` -> first half encoded unpadded when a prefix is
+///     present; else padded to 9 chars (timestamp width) when the raw
+///     encoding fits in 9 chars, else padded to 13.
+///
+/// The second half is always 13-char padded.
+fn build_base(prefix: Option<&str>, n1: u64, n2: u64, padded: bool) -> String {
+    let normalized_prefix = normalize_prefix(prefix);
+    let has_prefix = normalized_prefix.is_some();
+
+    let encoded1 = if has_prefix || padded {
+        EncoderBase32Crockford::encode(n1, padded)
+    } else {
+        let raw = EncoderBase32Crockford::encode(n1, false);
+        let pad_to = if raw.len() <= TIMESTAMP_ENCODED_LENGTH {
+            TIMESTAMP_ENCODED_LENGTH
+        } else {
+            RANDOM_ENCODED_LENGTH
+        };
+        format!("{:0>width$}", raw, width = pad_to)
+    };
+    let encoded2 = EncoderBase32Crockford::encode(n2, true);
+    normalized_prefix.unwrap_or_default() + &encoded1 + &encoded2
 }
 
 fn is_valid_prefix(prefix: &str) -> bool {
