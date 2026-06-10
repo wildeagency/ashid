@@ -812,6 +812,122 @@ func TestAshid4_64BitRoundtrip(t *testing.T) {
 	}
 }
 
+// ---- Create4 padding lockdown ----
+//
+// Create4 must always emit both halves 13-char padded, regardless of input
+// magnitude. These pin the wire format so a refactor that drops padding
+// (e.g. routing Create4 through an unpadded builder) fails loudly.
+// Mirrors typescript/test/ashid.test.ts.
+
+func TestCreate4_Padding_ZeroZero_WithPrefix(t *testing.T) {
+	id, err := Create4("tok", 0, 0)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	const want = "tok_00000000000000000000000000"
+	if id != want {
+		t.Errorf("Create4(tok, 0, 0) = %q, want %q", id, want)
+	}
+}
+
+func TestCreate4_Padding_ZeroZero_NoPrefix(t *testing.T) {
+	id, err := Create4("", 0, 0)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	const want = "00000000000000000000000000"
+	if id != want {
+		t.Errorf("Create4(\"\", 0, 0) = %q, want %q", id, want)
+	}
+}
+
+func TestCreate4_Padding_OneZero_WithPrefix(t *testing.T) {
+	id, err := Create4("tok", 1, 0)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	const want = "tok_00000000000010000000000000"
+	if id != want {
+		t.Errorf("Create4(tok, 1, 0) = %q, want %q", id, want)
+	}
+}
+
+func TestCreate4_Padding_CrockfordZ_WithPrefix(t *testing.T) {
+	id, err := Create4("tok", 31, 0)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	const want = "tok_000000000000z0000000000000"
+	if id != want {
+		t.Errorf("Create4(tok, 31, 0) = %q, want %q", id, want)
+	}
+}
+
+func TestCreate4_Padding_MaxU64_FirstHalf(t *testing.T) {
+	id, err := Create4("tok", ^uint64(0), 0)
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	const want = "tok_fzzzzzzzzzzzz0000000000000"
+	if id != want {
+		t.Errorf("Create4(tok, max u64, 0) = %q, want %q", id, want)
+	}
+	if len(id) != 3+1+26 {
+		t.Errorf("len = %d, want %d", len(id), 3+1+26)
+	}
+}
+
+func TestCreate4_Padding_MaxU64_SecondHalf(t *testing.T) {
+	id, err := Create4("tok", 0, ^uint64(0))
+	if err != nil {
+		t.Fatalf("Create4 error: %v", err)
+	}
+	const want = "tok_0000000000000fzzzzzzzzzzzz"
+	if id != want {
+		t.Errorf("Create4(tok, 0, max u64) = %q, want %q", id, want)
+	}
+	if len(id) != 3+1+26 {
+		t.Errorf("len = %d, want %d", len(id), 3+1+26)
+	}
+}
+
+func TestCreate4_Padding_NoPrefix_Always26Chars(t *testing.T) {
+	samples := [][2]uint64{
+		{0, 0},
+		{1, 0},
+		{0, 1},
+		{31, 31},
+		{^uint64(0), 0},
+		{0, ^uint64(0)},
+	}
+	for _, s := range samples {
+		id, err := Create4("", s[0], s[1])
+		if err != nil {
+			t.Fatalf("Create4(%d, %d) error: %v", s[0], s[1], err)
+		}
+		if len(id) != 26 {
+			t.Errorf("Create4(\"\", %d, %d) len = %d, want 26", s[0], s[1], len(id))
+		}
+	}
+}
+
+func TestCreate4_Padding_WithPrefix_LengthInvariant(t *testing.T) {
+	samples := [][2]uint64{
+		{0, 0},
+		{1, 0},
+		{^uint64(0), ^uint64(0)},
+	}
+	for _, s := range samples {
+		id, err := Create4("tok", s[0], s[1])
+		if err != nil {
+			t.Fatalf("Create4(%d, %d) error: %v", s[0], s[1], err)
+		}
+		if len(id) != 3+1+26 {
+			t.Errorf("Create4(tok, %d, %d) len = %d, want %d", s[0], s[1], len(id), 3+1+26)
+		}
+	}
+}
+
 // ---- Encoder big.Int integration ----
 
 // ---- Append API ----
