@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 No unreleased changes.
 
+## [1.3.0] - 2026-06-10 (Rust)
+
+### Fixed
+- `Ashid::normalize()` corrupted ashid4 inputs whose first long encoded with leading zeros. The previous implementation routed every input through `Self::create()` (timestamp + random), which writes the first component unpadded — dropping the leading zeros of a 13-char-padded ashid4 random component and producing a different value. Closes #8.
+
+### Changed
+- `normalize()` now routes through a shared `build_base(prefix, n1, n2, padded)` helper (called with `padded=false`) that mirrors the TypeScript 1.6.0 builder. A v1 input still normalizes to v1 shape; a full-entropy ashid4 input round-trips to ashid4 shape (the first long naturally fills 13 chars). A pathological ashid4 with a small first long collapses to v1 shape — the two longs survive, only the string shape changes. Idempotent: `normalize(normalize(x))? == normalize(x)?`.
+
+### Added
+- `create4` 13-char padding lockdown test suite (8 tests) covering `(0, 0)`, `(1, 0)`, Crockford `z`, max u64 in either half, and length invariants across input magnitudes. Mirrors the equivalent suites in TypeScript / Python / Kotlin / Go.
+
 ## 2026-06-10 (Go)
 
 ### Fixed
