@@ -603,6 +603,74 @@ class AshidTest {
         assertEquals(random2, decoded2)
     }
 
+    // ---- create4 padding lockdown ----
+    //
+    // create4 must always emit both halves 13-char padded, regardless of
+    // input magnitude. These pin the wire format so a refactor that drops
+    // padding (e.g. routing create4 through an unpadded builder) fails
+    // loudly. Mirrors typescript/test/ashid.test.ts.
+
+    @Test
+    fun `create4 padding zero zero with prefix`() {
+        assertEquals("tok_00000000000000000000000000", Ashid.create4("tok", 0uL, 0uL))
+    }
+
+    @Test
+    fun `create4 padding zero zero no prefix`() {
+        assertEquals("00000000000000000000000000", Ashid.create4(null, 0uL, 0uL))
+    }
+
+    @Test
+    fun `create4 padding one zero with prefix`() {
+        assertEquals("tok_00000000000010000000000000", Ashid.create4("tok", 1uL, 0uL))
+    }
+
+    @Test
+    fun `create4 padding crockford z with prefix`() {
+        assertEquals("tok_000000000000z0000000000000", Ashid.create4("tok", 31uL, 0uL))
+    }
+
+    @Test
+    fun `create4 padding max ULong first half`() {
+        val id = Ashid.create4("tok", ULong.MAX_VALUE, 0uL)
+        assertEquals("tok_fzzzzzzzzzzzz0000000000000", id)
+        assertEquals(3 + 1 + 26, id.length)
+    }
+
+    @Test
+    fun `create4 padding max ULong second half`() {
+        val id = Ashid.create4("tok", 0uL, ULong.MAX_VALUE)
+        assertEquals("tok_0000000000000fzzzzzzzzzzzz", id)
+        assertEquals(3 + 1 + 26, id.length)
+    }
+
+    @Test
+    fun `create4 padding no prefix always 26 chars`() {
+        val samples = listOf(
+            0uL to 0uL,
+            1uL to 0uL,
+            0uL to 1uL,
+            31uL to 31uL,
+            ULong.MAX_VALUE to 0uL,
+            0uL to ULong.MAX_VALUE,
+        )
+        for ((r1, r2) in samples) {
+            assertEquals(26, Ashid.create4(null, r1, r2).length)
+        }
+    }
+
+    @Test
+    fun `create4 padding with prefix length invariant`() {
+        val samples = listOf(
+            0uL to 0uL,
+            1uL to 0uL,
+            ULong.MAX_VALUE to ULong.MAX_VALUE,
+        )
+        for ((r1, r2) in samples) {
+            assertEquals(3 + 1 + 26, Ashid.create4("tok", r1, r2).length)
+        }
+    }
+
     // --- UUID round-trip ---
 
     @Test
