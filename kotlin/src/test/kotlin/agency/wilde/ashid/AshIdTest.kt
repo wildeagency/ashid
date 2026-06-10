@@ -326,6 +326,75 @@ class AshidTest {
         assertEquals("user_", Ashid.prefix(normalized))
     }
 
+    // ---- Normalize: ashid4 round-trip ----
+    //
+    // Regression coverage: prior to the unified normalize, the function routed
+    // through create() (timestamp + random) for every input, which encoded the
+    // first half unpadded. For ashid4 inputs with leading zeros at the front of
+    // the first long, those zeros got dropped — corrupting the value.
+
+    @Test
+    fun `normalize ashid4 with prefix full entropy is identity`() {
+        val original = Ashid.create4("tok", 0x112210f47de98115uL, 0x88f7bfa8ac471d31uL)
+        assertEquals(original, Ashid.normalize(original))
+    }
+
+    @Test
+    fun `normalize ashid4 no prefix full entropy is identity`() {
+        val original = Ashid.create4(null, 0x112210f47de98115uL, 0x88f7bfa8ac471d31uL)
+        assertEquals(original, Ashid.normalize(original))
+    }
+
+    @Test
+    fun `normalize uppercased ashid4 with prefix back to canonical`() {
+        val original = Ashid.create4("tok", 0xdeadbeefcafebabeuL, 0x0123456789abcdefuL)
+        assertEquals(original, Ashid.normalize(original.uppercase()))
+    }
+
+    @Test
+    fun `normalize uppercased ashid4 no prefix back to canonical`() {
+        val original = Ashid.create4(null, 0xdeadbeefcafebabeuL, 0x0123456789abcdefuL)
+        assertEquals(original, Ashid.normalize(original.uppercase()))
+    }
+
+    @Test
+    fun `normalize ashid4 small first long collapses to v1 shape`() {
+        // Small first long → the canonical type-1 path truncates leading zeros, so
+        // the shape collapses to v1. The values survive, which is the point of
+        // normalize().
+        val r1: ULong = 1uL
+        val r2: ULong = 0uL
+        val original = Ashid.create4("tok", r1, r2)
+        val normalized = Ashid.normalize(original)
+        assertEquals(r1.toLong(), Ashid.timestamp(normalized))
+        assertEquals(r2.toLong(), Ashid.random(normalized))
+    }
+
+    @Test
+    fun `normalize is idempotent across v1 and ashid4`() {
+        val v1 = Ashid.create("user", time = 1_609_459_200_000L, randomLong = 12345L)
+        val once = Ashid.normalize(v1)
+        assertEquals(once, Ashid.normalize(once))
+
+        val a4 = Ashid.create4("tok", 0xdeadbeefcafebabeuL, 0x0123456789abcdefuL)
+        val a4Once = Ashid.normalize(a4)
+        assertEquals(a4, a4Once)
+        assertEquals(a4Once, Ashid.normalize(a4Once))
+    }
+
+    @Test
+    fun `normalize v1 and matching ashid4 collapse to same canonical`() {
+        // normalize routes through buildBase(padded = false), so a v1 and an
+        // ashid4 with the same two longs (when the first long is small enough
+        // to truncate) produce the same canonical (v1) shape.
+        val long1: Long = 1_609_459_200_000L
+        val long2: Long = 12345L
+        val v1 = Ashid.create("tok", time = long1, randomLong = long2)
+        val a4 = Ashid.create4("tok", long1.toULong(), long2.toULong())
+        assertEquals(Ashid.normalize(a4), Ashid.normalize(v1))
+        assertEquals(v1, Ashid.normalize(v1))
+    }
+
     // ==================== VALIDATION TESTS ====================
 
     @Test
@@ -532,6 +601,74 @@ class AshidTest {
 
         assertEquals(random1, decoded1)
         assertEquals(random2, decoded2)
+    }
+
+    // ---- create4 padding lockdown ----
+    //
+    // create4 must always emit both halves 13-char padded, regardless of
+    // input magnitude. These pin the wire format so a refactor that drops
+    // padding (e.g. routing create4 through an unpadded builder) fails
+    // loudly. Mirrors typescript/test/ashid.test.ts.
+
+    @Test
+    fun `create4 padding zero zero with prefix`() {
+        assertEquals("tok_00000000000000000000000000", Ashid.create4("tok", 0uL, 0uL))
+    }
+
+    @Test
+    fun `create4 padding zero zero no prefix`() {
+        assertEquals("00000000000000000000000000", Ashid.create4(null, 0uL, 0uL))
+    }
+
+    @Test
+    fun `create4 padding one zero with prefix`() {
+        assertEquals("tok_00000000000010000000000000", Ashid.create4("tok", 1uL, 0uL))
+    }
+
+    @Test
+    fun `create4 padding crockford z with prefix`() {
+        assertEquals("tok_000000000000z0000000000000", Ashid.create4("tok", 31uL, 0uL))
+    }
+
+    @Test
+    fun `create4 padding max ULong first half`() {
+        val id = Ashid.create4("tok", ULong.MAX_VALUE, 0uL)
+        assertEquals("tok_fzzzzzzzzzzzz0000000000000", id)
+        assertEquals(3 + 1 + 26, id.length)
+    }
+
+    @Test
+    fun `create4 padding max ULong second half`() {
+        val id = Ashid.create4("tok", 0uL, ULong.MAX_VALUE)
+        assertEquals("tok_0000000000000fzzzzzzzzzzzz", id)
+        assertEquals(3 + 1 + 26, id.length)
+    }
+
+    @Test
+    fun `create4 padding no prefix always 26 chars`() {
+        val samples = listOf(
+            0uL to 0uL,
+            1uL to 0uL,
+            0uL to 1uL,
+            31uL to 31uL,
+            ULong.MAX_VALUE to 0uL,
+            0uL to ULong.MAX_VALUE,
+        )
+        for ((r1, r2) in samples) {
+            assertEquals(26, Ashid.create4(null, r1, r2).length)
+        }
+    }
+
+    @Test
+    fun `create4 padding with prefix length invariant`() {
+        val samples = listOf(
+            0uL to 0uL,
+            1uL to 0uL,
+            ULong.MAX_VALUE to ULong.MAX_VALUE,
+        )
+        for ((r1, r2) in samples) {
+            assertEquals(3 + 1 + 26, Ashid.create4("tok", r1, r2).length)
+        }
     }
 
     // --- UUID round-trip ---
