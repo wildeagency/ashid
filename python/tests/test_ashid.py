@@ -462,6 +462,56 @@ class TestAshid4:
         with pytest.raises(ValueError, match="non-negative"):
             Ashid.create4("tok", 100, -1)
 
+    # ---- create4 padding lockdown ----
+    #
+    # create4 must always emit both halves 13-char padded, regardless of
+    # input magnitude. These pin the wire format so a refactor that drops
+    # padding (e.g. routing create4 through an unpadded builder) fails
+    # loudly. Mirrors typescript/test/ashid.test.ts.
+
+    def test_padding_zero_zero_with_prefix(self):
+        assert Ashid.create4("tok", 0, 0) == "tok_00000000000000000000000000"
+
+    def test_padding_zero_zero_no_prefix(self):
+        assert Ashid.create4(None, 0, 0) == "00000000000000000000000000"
+
+    def test_padding_one_zero_with_prefix(self):
+        assert Ashid.create4("tok", 1, 0) == "tok_00000000000010000000000000"
+
+    def test_padding_crockford_z_with_prefix(self):
+        assert Ashid.create4("tok", 31, 0) == "tok_000000000000z0000000000000"
+
+    def test_padding_max_u64_first_half(self):
+        id = Ashid.create4("tok", (1 << 64) - 1, 0)
+        assert id == "tok_fzzzzzzzzzzzz0000000000000"
+        assert len(id) == 3 + 1 + 26
+
+    def test_padding_max_u64_second_half(self):
+        id = Ashid.create4("tok", 0, (1 << 64) - 1)
+        assert id == "tok_0000000000000fzzzzzzzzzzzz"
+        assert len(id) == 3 + 1 + 26
+
+    def test_padding_no_prefix_always_26_chars(self):
+        samples = [
+            (0, 0),
+            (1, 0),
+            (0, 1),
+            (31, 31),
+            ((1 << 64) - 1, 0),
+            (0, (1 << 64) - 1),
+        ]
+        for r1, r2 in samples:
+            assert len(Ashid.create4(None, r1, r2)) == 26
+
+    def test_padding_with_prefix_length_invariant(self):
+        samples = [
+            (0, 0),
+            (1, 0),
+            ((1 << 64) - 1, (1 << 64) - 1),
+        ]
+        for r1, r2 in samples:
+            assert len(Ashid.create4("tok", r1, r2)) == 3 + 1 + 26
+
 
 class TestUuidRoundTrip:
     def test_to_uuid_format(self):
