@@ -329,16 +329,21 @@ func FromUuid(uuid, prefix string) (string, error) {
 
 // Normalize lowercases the prefix and re-encodes the ID through canonical form,
 // mapping ambiguous characters (I/L -> 1, O -> 0, U -> V) along the way.
+//
+// Type-1 inputs round-trip to type-1 shape; full-entropy ashid4 inputs round-trip
+// to ashid4 shape (the first long naturally fills 13 chars). An ashid4 with a
+// small first long collapses to type-1 shape — the two longs survive, only the
+// string shape changes.
 func Normalize(id string) (string, error) {
-	prefix, ts, r, err := Parse(id)
+	prefix, encodedFirst, encodedSecond, err := Parse(id)
 	if err != nil {
 		return "", err
 	}
-	timestamp, err := Decode(ts)
+	long1, err := DecodeBigInt(encodedFirst)
 	if err != nil {
 		return "", err
 	}
-	random, err := DecodeBigInt(r)
+	long2, err := DecodeBigInt(encodedSecond)
 	if err != nil {
 		return "", err
 	}
@@ -347,23 +352,19 @@ func Normalize(id string) (string, error) {
 	if prefix != "" {
 		normalizedPrefix = strings.ToLower(prefix)
 	}
-
-	if random.IsUint64() {
-		return Create(normalizedPrefix, int64(timestamp), random.Uint64())
-	}
-	return createBigInt(normalizedPrefix, int64(timestamp), random)
+	return buildBase(normalizedPrefix, long1, long2, false)
 }
 
-// createBigInt mirrors Create but accepts a *big.Int random for full-precision
-// round-trips. Used by Normalize for IDs whose random component exceeds 64 bits.
-func createBigInt(prefix string, timestampMs int64, randomLong *big.Int) (string, error) {
-	if timestampMs < 0 {
-		return "", errors.New("ashid timestamp must be non-negative")
-	}
-	if timestampMs > MaxTimestamp {
-		return "", fmt.Errorf("ashid timestamp must not exceed %d (Dec 12, 3084)", MaxTimestamp)
-	}
-	if randomLong == nil || randomLong.Sign() < 0 {
+// buildBase encodes two non-negative big.Int components into the canonical
+// base ID form. Mirrors the TypeScript buildBase used by create/create4:
+//   - padded=true  → both halves 13-char zero-padded (ashid4 shape).
+//   - padded=false → first half encoded unpadded when a prefix is present, or
+//     padded to 9 chars (timestamp width) when the value fits in 9 chars and
+//     no prefix is present, else padded to 13.
+//
+// The second half is always 13-char padded.
+func buildBase(prefix string, n1, n2 *big.Int, padded bool) (string, error) {
+	if n1 == nil || n1.Sign() < 0 || n2 == nil || n2.Sign() < 0 {
 		return "", errors.New("ashid random value must be non-negative")
 	}
 
@@ -374,30 +375,32 @@ func createBigInt(prefix string, timestampMs int64, randomLong *big.Int) (string
 	dst = appendNormalizedPrefix(dst, prefix)
 	hasPrefix := len(dst) > prefixStart
 
-	if hasPrefix {
-		if timestampMs > 0 {
-			dst = AppendEncode(dst, uint64(timestampMs), false)
-			out, err := AppendEncodeBigInt(dst, randomLong, true)
-			if err != nil {
-				return "", err
-			}
-			dst = out
-		} else {
-			out, err := AppendEncodeBigInt(dst, randomLong, false)
-			if err != nil {
-				return "", err
-			}
-			dst = out
-		}
-	} else {
-		dst = appendEncodeWidth(dst, uint64(timestampMs), true, timestampEncodedLength)
-		out, err := AppendEncodeBigInt(dst, randomLong, true)
+	if hasPrefix || padded {
+		out, err := AppendEncodeBigInt(dst, n1, padded)
 		if err != nil {
 			return "", err
 		}
 		dst = out
+	} else {
+		raw, err := AppendEncodeBigInt(nil, n1, false)
+		if err != nil {
+			return "", err
+		}
+		width := timestampEncodedLength
+		if len(raw) > timestampEncodedLength {
+			width = randomEncodedLength
+		}
+		for i := len(raw); i < width; i++ {
+			dst = append(dst, '0')
+		}
+		dst = append(dst, raw...)
 	}
-	return string(dst), nil
+
+	out, err := AppendEncodeBigInt(dst, n2, true)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 func appendNormalizedPrefix(dst []byte, prefix string) []byte {
