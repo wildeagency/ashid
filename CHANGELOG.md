@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 No unreleased changes.
 
+## [1.7.0] - 2026-06-24 (TypeScript)
+
+### Changed
+- **Restore minimal-form output for the `time === 0` + prefix corner.** `create('user', 0, 0n)` now emits `'user_0'` again (6 chars); `create('user', 0, 1n)` → `'user_1'`; `create('user', 0, 12345n)` → `'user_c1s'`. Reverses the 1.6.0 "behavior shift" that always padded the random half to 13 chars even when the timestamp half was empty. Values still round-trip via `Ashid.timestamp()` / `Ashid.random()` either way; this change is purely about brevity at the wire. The padded form (`prefix + '0' + 13-char-padded random`) was never the canonical shape — `parse()` has always recognized minimal form via its `baseId.length <= RANDOM_ENCODED_LENGTH` branch (the "pre-1.6.0 minimal form" comment).
+- The change makes `create()` the natural way to mint short, sequence-driven ids (e.g. `create('url', 0, BigInt(nextval))` → `'url_AB'`) without needing a separate `createShort` helper. The minimal form parses back to type-1 with `time=0`, so it slots into the existing parse / normalize contract.
+- `buildBase` now branches on `(prefix && !padded && n1 === 0n)` to emit the minimal form. All other shapes — `n1 !== 0n` with prefix (random still 13-padded as the parse anchor), `padded=true` (create4), no-prefix (fixed 22 / 26 char base) — are unchanged.
+
+### Tests
+- Updated the "timestamp 0, random N" assertions in `test/ashid.test.ts` to lock the minimal-form output. Added a `timestamp 1, random 1 → 'user_10000000000001'` case so the `n1 !== 0n` path stays pinned at 13-char padding for the random half.
+- All 155 tests pass.
+
+### Other language ports
+The Python, Kotlin, Rust, and Go ports still carry the 1.6.0-equivalent always-padded behavior. Restoring minimal form in those ports is tracked as separate issues — the TypeScript port leads here.
+
 ## [1.3.0] - 2026-06-10 (Rust)
 
 ### Fixed

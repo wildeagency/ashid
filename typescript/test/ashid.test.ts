@@ -194,28 +194,43 @@ describe('Ashid', () => {
     });
 
     describe('prefix (variable length with delimiter)', () => {
-      // The random half is always 13-char padded — it's the parse anchor.
-      // The timestamp half truncates leading zeros under create() (type-1).
+      // Two shapes with a prefix:
+      //   - timestamp === 0  → minimal form: prefix_<random_unpadded>.
+      //                        Parse recovers time=0 via the
+      //                        baseId.length ≤ RANDOM_ENCODED_LENGTH branch.
+      //   - timestamp !== 0  → prefix_<ts_unpadded><random_padded_to_13>.
+      //                        The 13-char random tail is the parse anchor.
 
-      it('timestamp 0, random 0 → unpadded "0" + padded random', () => {
+      it('timestamp 0, random 0 → minimal form prefix_0', () => {
         const id = Ashid.create('user', 0, 0n);
-        expect(id).toBe('user_00000000000000');
-        expect(id.length).toBe(5 + 1 + 13);
+        expect(id).toBe('user_0');
+        expect(id.length).toBe(6);
       });
 
-      it('timestamp 0, random 1 → unpadded "0" + padded random', () => {
+      it('timestamp 0, random 1 → minimal form prefix_1', () => {
         const id = Ashid.create('user', 0, 1n);
-        expect(id).toBe('user_00000000000001');
+        expect(id).toBe('user_1');
       });
 
-      it('timestamp 0, random 31 → unpadded "0" + padded random', () => {
+      it('timestamp 0, random 31 → minimal form prefix_z', () => {
         const id = Ashid.create('user', 0, 31n);
-        expect(id).toBe('user_0000000000000z');
+        expect(id).toBe('user_z');
+      });
+
+      it('timestamp 0, random 12345 → minimal form prefix_c1s', () => {
+        const id = Ashid.create('user', 0, 12345n);
+        expect(id).toBe('user_c1s');
       });
 
       it('timestamp 1, random 0 should include timestamp', () => {
         const id = Ashid.create('user', 1, 0n);
         expect(id).toBe('user_10000000000000');
+        expect(id.length).toBe(19); // 'user_' (5) + 1 + 13
+      });
+
+      it('timestamp 1, random 1 → unpadded ts + padded random', () => {
+        const id = Ashid.create('user', 1, 1n);
+        expect(id).toBe('user_10000000000001');
         expect(id.length).toBe(19); // 'user_' (5) + 1 + 13
       });
 
@@ -227,7 +242,7 @@ describe('Ashid', () => {
 
       it('single letter prefix should also get delimiter', () => {
         const id = Ashid.create('u', 0, 0n);
-        expect(id).toBe('u_00000000000000');
+        expect(id).toBe('u_0');
       });
     });
   });

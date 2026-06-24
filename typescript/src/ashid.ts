@@ -31,8 +31,12 @@ export class Ashid {
 
   /**
    * Type-1 (time-sortable): `[prefix_]<timestamp><random>`. The timestamp
-   * half truncates leading zeros when a prefix is present; the random half
-   * is always 13-char padded.
+   * half truncates leading zeros when a prefix is present; the random
+   * half is 13-char padded EXCEPT when `time === 0` with a prefix, in
+   * which case the timestamp is omitted entirely and the random half is
+   * emitted unpadded (minimal form, `prefix_<random>`). The minimal form
+   * parses back via the `baseId.length <= RANDOM_ENCODED_LENGTH` branch
+   * of {@link parse}, so values round-trip.
    */
   static create(
     prefix?: string,
@@ -220,12 +224,18 @@ export class Ashid {
   /**
    * Shared builder for the `createN` family.
    *
-   * Layout is always `[prefix_]<encoded1><encoded2>`. The second half is
-   * always 13-char padded (the parse anchor). The first half:
-   * - With prefix or `padded=true`: encoded via `encodeBigInt(_, padded)`.
-   * - No prefix + `padded=false`: pad to 9 if the encoding fits (22-char
-   *   standard base), else to 13 (26-char base) — `parse()` needs a known
-   *   split point without a delimiter.
+   * Layout is `[prefix_]<encoded1><encoded2>` with three shapes:
+   * - **Minimal form** (prefix + `!padded` + `n1 === 0n`): encoded1 is
+   *   omitted entirely and encoded2 is unpadded → `prefix_<encoded2>`.
+   *   Round-trips via the `baseId.length <= RANDOM_ENCODED_LENGTH`
+   *   branch of {@link parse}. Suitable for sequential-id encodings where
+   *   brevity matters more than time-sortability.
+   * - **Type-1 with prefix** (prefix + `!padded` + `n1 !== 0n`): encoded1
+   *   is unpadded, encoded2 is 13-char padded (the parse anchor).
+   * - **No prefix or `padded`**: encoded2 is 13-char padded; encoded1 is
+   *   padded to either 9 (standard 22-char base, `n1` fits) or 13
+   *   (ashid4 26-char base) so `parse()` has a known split point without
+   *   a delimiter.
    *
    * Negative inputs throw via the encoder.
    */
@@ -238,6 +248,13 @@ export class Ashid {
     const b1 = typeof n1 === 'bigint' ? n1 : BigInt(n1);
     const b2 = typeof n2 === 'bigint' ? n2 : BigInt(n2);
     const normalizedPrefix = this.normalizePrefix(prefix);
+
+    // Minimal form: prefix + n1=0 + unpadded → drop encoded1, unpad
+    // encoded2. parse() recognises this when the post-prefix base is
+    // <= RANDOM_ENCODED_LENGTH chars.
+    if (normalizedPrefix && !padded && b1 === 0n) {
+      return normalizedPrefix + EncoderBase32Crockford.encodeBigInt(b2, false);
+    }
 
     let encoded1: string;
     if (normalizedPrefix || padded) {
