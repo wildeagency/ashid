@@ -356,13 +356,15 @@ func Normalize(id string) (string, error) {
 }
 
 // buildBase encodes two non-negative big.Int components into the canonical
-// base ID form. Mirrors the TypeScript buildBase used by create/create4:
-//   - padded=true  → both halves 13-char zero-padded (ashid4 shape).
-//   - padded=false → first half encoded unpadded when a prefix is present, or
-//     padded to 9 chars (timestamp width) when the value fits in 9 chars and
-//     no prefix is present, else padded to 13.
-//
-// The second half is always 13-char padded.
+// base ID form. Mirrors the TypeScript 1.7.0 buildBase with three shapes:
+//   - Minimal form (prefix + !padded + n1 == 0): encoded1 is omitted entirely
+//     and encoded2 is unpadded → `prefix_<encoded2>`. Parse recognises this
+//     via the `baseID.length <= randomEncodedLength` branch.
+//   - Type-1 with prefix (prefix + !padded + n1 != 0): encoded1 is unpadded,
+//     encoded2 is 13-char padded (the parse anchor).
+//   - No prefix or `padded`: encoded2 is 13-char padded; encoded1 is padded
+//     to 9 chars (standard 22-char base) if it fits, else 13 (ashid4 26-char
+//     base).
 func buildBase(prefix string, n1, n2 *big.Int, padded bool) (string, error) {
 	if n1 == nil || n1.Sign() < 0 || n2 == nil || n2.Sign() < 0 {
 		return "", errors.New("ashid random value must be non-negative")
@@ -374,6 +376,14 @@ func buildBase(prefix string, n1, n2 *big.Int, padded bool) (string, error) {
 	prefixStart := len(dst)
 	dst = appendNormalizedPrefix(dst, prefix)
 	hasPrefix := len(dst) > prefixStart
+
+	if hasPrefix && !padded && n1.Sign() == 0 {
+		out, err := AppendEncodeBigInt(dst, n2, false)
+		if err != nil {
+			return "", err
+		}
+		return string(out), nil
+	}
 
 	if hasPrefix || padded {
 		out, err := AppendEncodeBigInt(dst, n1, padded)

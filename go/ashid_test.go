@@ -610,6 +610,90 @@ func TestNormalize_V1AndMatchingAshid4_CollapseToSameShape(t *testing.T) {
 	}
 }
 
+// ---- Normalize: minimal form preservation (time=0 + prefix) ----
+//
+// Mirrors TypeScript 1.7.0: when an input has a prefix and decodes to
+// time=0, Normalize() round-trips to the minimal form
+// (prefix_<random_unpadded>) rather than expanding to the 13-char-padded
+// form. Pre-1.6.0 minimal-form ids and the always-padded 1.6.0-equivalent
+// form both collapse to minimal — values still survive.
+
+func TestNormalize_PreservesMinimalForm(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"user_0", "user_0"},
+		{"user_1", "user_1"},
+		{"user_z", "user_z"},
+		{"user_c1s", "user_c1s"},
+	}
+	for _, c := range cases {
+		got, err := Normalize(c.in)
+		if err != nil {
+			t.Fatalf("Normalize(%q) error: %v", c.in, err)
+		}
+		if got != c.want {
+			t.Errorf("Normalize(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestNormalize_CollapsesPaddedZeroRandomToMinimal(t *testing.T) {
+	// user_<14 zeros>: parses as time=0 + random=0, then re-emits as user_0.
+	got, err := Normalize("user_00000000000000")
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if got != "user_0" {
+		t.Errorf("Normalize collapse zero = %q, want %q", got, "user_0")
+	}
+}
+
+func TestNormalize_CollapsesPaddedRandomToMinimal(t *testing.T) {
+	got, err := Normalize("user_00000000000c1s")
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if got != "user_c1s" {
+		t.Errorf("Normalize collapse c1s = %q, want %q", got, "user_c1s")
+	}
+}
+
+func TestNormalize_MinimalFormLowercasesPrefix(t *testing.T) {
+	got, err := Normalize("USER_C1S")
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if got != "user_c1s" {
+		t.Errorf("Normalize uppercase = %q, want %q", got, "user_c1s")
+	}
+}
+
+func TestNormalize_CreateMinimalFormRoundtrip(t *testing.T) {
+	original, err := Create("user", 0, 12345)
+	if err != nil {
+		t.Fatalf("Create error: %v", err)
+	}
+	if original != "user_c1s" {
+		t.Fatalf("Create(\"user\", 0, 12345) = %q, want %q", original, "user_c1s")
+	}
+	got, err := Normalize(original)
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if got != original {
+		t.Errorf("Normalize roundtrip = %q, want %q", got, original)
+	}
+}
+
+func TestNormalize_MinimalFormIdempotent(t *testing.T) {
+	once, _ := Normalize("user_c1s")
+	twice, _ := Normalize(once)
+	if twice != once {
+		t.Errorf("minimal-form idempotence broken: once=%q twice=%q", once, twice)
+	}
+}
+
 // ---- IsValid ----
 
 func TestIsValid_ValidIDs(t *testing.T) {
