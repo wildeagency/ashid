@@ -332,6 +332,47 @@ class TestNormalize:
         assert Ashid.normalize(v1) == Ashid.normalize(a4)
         assert Ashid.normalize(v1) == v1
 
+    # ---- Normalize: minimal form preservation (time=0 + prefix) ----
+    #
+    # Mirrors TypeScript 1.7.0: when an input has a prefix and decodes to
+    # time=0, normalize() round-trips to the minimal form
+    # (prefix_<random_unpadded>) rather than expanding to the 13-char-padded
+    # form. Pre-1.6.0 minimal-form ids and the always-padded 1.6.0-equivalent
+    # form both collapse to minimal — values still survive.
+
+    def test_normalize_preserves_minimal_form_zero(self):
+        assert Ashid.normalize("user_0") == "user_0"
+
+    def test_normalize_preserves_minimal_form_one(self):
+        assert Ashid.normalize("user_1") == "user_1"
+
+    def test_normalize_preserves_minimal_form_z(self):
+        assert Ashid.normalize("user_z") == "user_z"
+
+    def test_normalize_preserves_minimal_form_multichar(self):
+        assert Ashid.normalize("user_c1s") == "user_c1s"
+
+    def test_normalize_collapses_padded_zero_random_to_minimal(self):
+        # user_<14 zeros>: parses as time=0 + random=0, then re-emits as user_0
+        assert Ashid.normalize("user_00000000000000") == "user_0"
+
+    def test_normalize_collapses_padded_random_to_minimal(self):
+        # leading "0" timestamp half + 13-char random "0000000000c1s"
+        # collapses to minimal user_c1s
+        assert Ashid.normalize("user_00000000000c1s") == "user_c1s"
+
+    def test_normalize_minimal_form_lowercases_prefix(self):
+        assert Ashid.normalize("USER_C1S") == "user_c1s"
+
+    def test_normalize_create_minimal_form_roundtrip(self):
+        original = Ashid.create("user", 0, 12345)
+        assert original == "user_c1s"
+        assert Ashid.normalize(original) == original
+
+    def test_normalize_minimal_form_is_idempotent(self):
+        once = Ashid.normalize("user_c1s")
+        assert Ashid.normalize(once) == once
+
 
 class TestIsValid:
     def test_valid_ashids(self):

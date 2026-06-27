@@ -47,16 +47,23 @@ def _normalize_prefix(prefix: Optional[str]) -> Optional[str]:
 def _build_base(prefix: Optional[str], n1: int, n2: int, padded: bool) -> str:
     """Encode two non-negative ints into the canonical base ID form.
 
-    Mirrors the TypeScript buildBase routed through create()/create4():
-      - padded=True   -> both halves 13-char zero-padded (ashid4 shape).
-      - padded=False  -> first half encoded unpadded when a prefix is present;
-                         else padded to 9 chars (timestamp width) when the raw
-                         encoding fits in 9 chars, else padded to 13.
-    The second half is always 13-char padded.
+    Mirrors the TypeScript 1.7.0 buildBase with three shapes:
+      - Minimal form (prefix + not padded + n1 == 0): encoded1 is omitted
+        entirely and encoded2 is unpadded -> ``prefix_<encoded2>``. Parse
+        recognises this via the ``baseId.length <= RANDOM_ENCODED_LENGTH``
+        branch.
+      - Type-1 with prefix (prefix + not padded + n1 != 0): encoded1 is
+        unpadded, encoded2 is 13-char padded (the parse anchor).
+      - No prefix or ``padded``: encoded2 is 13-char padded; encoded1 is
+        padded to 9 chars (standard 22-char base) if it fits, else to 13
+        (ashid4 26-char base).
     """
     if n1 < 0 or n2 < 0:
         raise ValueError("Ashid random value must be non-negative")
     normalized_prefix = _normalize_prefix(prefix)
+
+    if normalized_prefix and not padded and n1 == 0:
+        return normalized_prefix + EncoderBase32Crockford.encode(n2, padded=False)
 
     if normalized_prefix or padded:
         encoded1 = EncoderBase32Crockford.encode(n1, padded=padded)

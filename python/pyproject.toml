@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ashid"
-version = "1.1.0"
+version = "1.2.0"
 description = "Time-sortable unique IDs with optional type prefixes (Stripe-style)"
 readme = "README.md"
 license = { text = "MIT" }
