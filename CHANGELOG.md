@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 No unreleased changes.
 
+## [1.4.0] - 2026-06-27 (Kotlin)
+
+### Changed
+- `Ashid.normalize()` now preserves the **minimal form** for `time === 0` +
+  prefix inputs, matching TypeScript 1.7.0. `normalize("user_0")` returns
+  `"user_0"` (not `"user_00000000000000"`); `normalize("user_c1s")` returns
+  `"user_c1s"` (not `"user_00000000000c1s"`). The 1.6.0-equivalent
+  always-padded form still parses correctly and collapses to minimal on
+  normalize — values survive. `normalize()` of a v1 input with `time > 0`,
+  any ashid4 input, or the no-prefix form is unchanged.
+- `buildBase()` now branches on `(hasPrefix && !padded && n1 == 0uL)` to
+  emit the minimal form, mirroring the TS 1.7.0 builder. `Ashid.create()`
+  was already emitting minimal form; only the `normalize()` path needed
+  alignment.
+
+### Tests
+- Added 9 `AshIdTest` cases pinning minimal-form preservation
+  (`user_0`, `user_1`, `user_z`, `user_c1s`), the padded → minimal collapse
+  (`user_00000000000c1s` → `user_c1s`), uppercase-prefix normalization,
+  `create` → `normalize` round-trip, and idempotence.
+
 ## [1.2.0] - 2026-06-27 (Python)
 
 ### Changed

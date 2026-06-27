@@ -395,6 +395,63 @@ class AshidTest {
         assertEquals(v1, Ashid.normalize(v1))
     }
 
+    // ---- Normalize: minimal form preservation (time=0 + prefix) ----
+    //
+    // Mirrors TypeScript 1.7.0: when an input has a prefix and decodes to
+    // time=0, normalize() round-trips to the minimal form
+    // (prefix_<random_unpadded>) rather than expanding to the 13-char-padded
+    // form. Pre-1.6.0 minimal-form ids and the always-padded 1.6.0-equivalent
+    // form both collapse to minimal — values still survive.
+
+    @Test
+    fun `normalize preserves minimal form prefix_0`() {
+        assertEquals("user_0", Ashid.normalize("user_0"))
+    }
+
+    @Test
+    fun `normalize preserves minimal form prefix_1`() {
+        assertEquals("user_1", Ashid.normalize("user_1"))
+    }
+
+    @Test
+    fun `normalize preserves minimal form prefix_z`() {
+        assertEquals("user_z", Ashid.normalize("user_z"))
+    }
+
+    @Test
+    fun `normalize preserves minimal form prefix_c1s`() {
+        assertEquals("user_c1s", Ashid.normalize("user_c1s"))
+    }
+
+    @Test
+    fun `normalize collapses padded zero random to minimal`() {
+        // user_<14 zeros>: parses as time=0 + random=0, then re-emits as user_0
+        assertEquals("user_0", Ashid.normalize("user_00000000000000"))
+    }
+
+    @Test
+    fun `normalize collapses padded random to minimal`() {
+        assertEquals("user_c1s", Ashid.normalize("user_00000000000c1s"))
+    }
+
+    @Test
+    fun `normalize minimal form lowercases prefix`() {
+        assertEquals("user_c1s", Ashid.normalize("USER_C1S"))
+    }
+
+    @Test
+    fun `normalize create minimal form roundtrip`() {
+        val original = Ashid.create("user", time = 0L, randomLong = 12345L)
+        assertEquals("user_c1s", original)
+        assertEquals(original, Ashid.normalize(original))
+    }
+
+    @Test
+    fun `normalize minimal form is idempotent`() {
+        val once = Ashid.normalize("user_c1s")
+        assertEquals(once, Ashid.normalize(once))
+    }
+
     // ==================== VALIDATION TESTS ====================
 
     @Test
