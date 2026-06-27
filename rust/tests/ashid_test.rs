@@ -435,6 +435,63 @@ fn normalize_v1_and_matching_ashid4_collapse_to_same_canonical() {
     assert_eq!(Ashid::normalize(&v1).unwrap(), v1);
 }
 
+// ---------- normalize() — minimal form (time=0 + prefix) ----------
+//
+// Mirrors TypeScript 1.7.0: when an input has a prefix and decodes to
+// time=0, normalize() round-trips to the minimal form
+// (prefix_<random_unpadded>) rather than expanding to the 13-char-padded
+// form. Pre-1.6.0 minimal-form ids and the always-padded 1.6.0-equivalent
+// form both collapse to minimal — values still survive.
+
+#[test]
+fn normalize_preserves_minimal_form_zero() {
+    assert_eq!(Ashid::normalize("user_0").unwrap(), "user_0");
+}
+
+#[test]
+fn normalize_preserves_minimal_form_one() {
+    assert_eq!(Ashid::normalize("user_1").unwrap(), "user_1");
+}
+
+#[test]
+fn normalize_preserves_minimal_form_z() {
+    assert_eq!(Ashid::normalize("user_z").unwrap(), "user_z");
+}
+
+#[test]
+fn normalize_preserves_minimal_form_multichar() {
+    assert_eq!(Ashid::normalize("user_c1s").unwrap(), "user_c1s");
+}
+
+#[test]
+fn normalize_collapses_padded_zero_random_to_minimal() {
+    // user_<14 zeros>: parses as time=0 + random=0, then re-emits as user_0.
+    assert_eq!(Ashid::normalize("user_00000000000000").unwrap(), "user_0");
+}
+
+#[test]
+fn normalize_collapses_padded_random_to_minimal() {
+    assert_eq!(Ashid::normalize("user_00000000000c1s").unwrap(), "user_c1s");
+}
+
+#[test]
+fn normalize_minimal_form_lowercases_prefix() {
+    assert_eq!(Ashid::normalize("USER_C1S").unwrap(), "user_c1s");
+}
+
+#[test]
+fn normalize_create_minimal_form_roundtrip() {
+    let original = Ashid::create(Some("user"), Some(0), Some(12345)).unwrap();
+    assert_eq!(original, "user_c1s");
+    assert_eq!(Ashid::normalize(&original).unwrap(), original);
+}
+
+#[test]
+fn normalize_minimal_form_is_idempotent() {
+    let once = Ashid::normalize("user_c1s").unwrap();
+    assert_eq!(Ashid::normalize(&once).unwrap(), once);
+}
+
 // ---------- is_valid ----------
 
 #[test]

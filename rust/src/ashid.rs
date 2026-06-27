@@ -278,16 +278,23 @@ impl Ashid {
 
 /// Encode two `u64` components into the canonical base ID form.
 ///
-/// Mirrors the TypeScript `buildBase` routed through `create()`/`create4()`:
-///   - `padded == true`  -> both halves 13-char zero-padded (ashid4 shape).
-///   - `padded == false` -> first half encoded unpadded when a prefix is
-///     present; else padded to 9 chars (timestamp width) when the raw
-///     encoding fits in 9 chars, else padded to 13.
-///
-/// The second half is always 13-char padded.
+/// Mirrors the TypeScript 1.7.0 `buildBase` with three shapes:
+///   - Minimal form (prefix + `!padded` + `n1 == 0`): encoded1 is omitted
+///     entirely and encoded2 is unpadded -> `prefix_<encoded2>`. Parse
+///     recognises this via the `base_id.len() <= RANDOM_ENCODED_LENGTH`
+///     branch.
+///   - Type-1 with prefix (prefix + `!padded` + `n1 != 0`): encoded1 is
+///     unpadded, encoded2 is 13-char padded (the parse anchor).
+///   - No prefix or `padded`: encoded2 is 13-char padded; encoded1 is
+///     padded to 9 chars (standard 22-char base) if it fits, else 13
+///     (ashid4 26-char base).
 fn build_base(prefix: Option<&str>, n1: u64, n2: u64, padded: bool) -> String {
     let normalized_prefix = normalize_prefix(prefix);
     let has_prefix = normalized_prefix.is_some();
+
+    if has_prefix && !padded && n1 == 0 {
+        return normalized_prefix.unwrap_or_default() + &EncoderBase32Crockford::encode(n2, false);
+    }
 
     let encoded1 = if has_prefix || padded {
         EncoderBase32Crockford::encode(n1, padded)
